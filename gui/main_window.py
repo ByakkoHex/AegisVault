@@ -1212,6 +1212,29 @@ class PasswordCard(ctk.CTkFrame):
             except tk.TclError:
                 pass
 
+    def update_mode(self, is_dark: bool):
+        """Aktualizuje kolory karty po zmianie trybu jasny/ciemny.
+
+        Analogicznie jak PasswordRow — wymuszamy jawne configure() bo CTK
+        może nie propagować tuple fg_color do dzieci CTkScrollableFrame.
+        """
+        border = "#3a3a3a" if is_dark else "#e8e8e8"
+        card_bg = DARK_ROW if is_dark else LIGHT_ROW
+        try:
+            self.configure(
+                fg_color=(LIGHT_ROW, DARK_ROW),
+                border_color=border,
+            )
+        except tk.TclError:
+            pass
+
+        # Przelicz nowy kolor hover i zarejestruj
+        hover = _blend_accent(ACCENT, card_bg, alpha=0.13)
+        try:
+            bind_hover_smooth(self, normal_color=(LIGHT_ROW, DARK_ROW), hover_color=hover)
+        except Exception:
+            pass
+
 
 # ──────────────────────────────────────────────
 # PODGLĄD HASŁA (dymek hover)
@@ -2269,6 +2292,47 @@ class PasswordRow(ctk.CTkFrame):
             except tk.TclError:
                 pass
 
+    def update_mode(self, is_dark: bool):
+        """Aktualizuje kolory wiersza po zmianie trybu jasny/ciemny.
+
+        CTK nie propaguje automatycznie tuple fg_color do dzieci CTkScrollableFrame,
+        dlatego wymuszamy jawne configure() na samym wierszu i odświeżamy hover.
+        """
+        border = "#3a3a3a" if is_dark else "#e8e8e8"
+        row_bg = DARK_ROW if is_dark else LIGHT_ROW
+        try:
+            # Wymuś ponowne zastosowanie fg_color — CTK może nie propagować tuple
+            # do widgetów zagnieżdżonych w CTkScrollableFrame
+            self.configure(
+                fg_color=(LIGHT_ROW, DARK_ROW),
+                border_color=border,
+            )
+        except tk.TclError:
+            pass
+
+        # Przelicz i zarejestruj nowy kolor hover (zależy od bg trybu)
+        hover = _blend_accent(ACCENT, row_bg, alpha=0.13)
+        try:
+            bind_hover_smooth(self, normal_color=(LIGHT_ROW, DARK_ROW), hover_color=hover)
+        except Exception:
+            pass
+
+        # Jeśli accordion jest rozwinięty — zaktualizuj tło strength_canvas
+        if self._detail_frame and self._detail_frame.winfo_exists():
+            canvas_bg = "#3a3a3a" if is_dark else "#d0d0d0"
+            try:
+                for child in self._detail_frame.winfo_children():
+                    # Szukamy CTkFrame-strength_row, a w nim tk.Canvas
+                    if isinstance(child, ctk.CTkFrame):
+                        for grandchild in child.winfo_children():
+                            if isinstance(grandchild, tk.Canvas):
+                                try:
+                                    grandchild.configure(bg=canvas_bg)
+                                except tk.TclError:
+                                    pass
+            except Exception:
+                pass
+
 
 # ──────────────────────────────────────────────
 # GŁÓWNE OKNO
@@ -2353,7 +2417,7 @@ class MainWindow(ctk.CTk):
         self.minsize(800, 520)
 
         self._build_ui()
-        self._load_passwords()
+        self._load_passwords(animate=False)
         self._start_auto_lock()
         self._setup_tray()
         self._setup_shortcuts()
@@ -4925,60 +4989,59 @@ class MainWindow(ctk.CTk):
         self._crossfade_theme_switch(new_mode)
 
     def _crossfade_theme_switch(self, new_mode: str):
-        """Fade okna (1→0.1→1) z podmianą motywu w środku (~300ms łącznie)."""
+        """Przełącza tryb jasny/ciemny z alpha-fade, bez blokowania pętli zdarzeń.
+
+        Faza 1 — fade-out: alpha 1.0 → 0.0 w ~80ms (8 kroków × 10ms)
+        Faza 2 — swap:     set_appearance_mode + _refresh_after_mode_change przy alpha=0
+        Faza 3 — fade-in:  alpha 0.0 → 1.0 w ~120ms (10 kroków × 12ms)
+        """
+        if getattr(self, "_theme_animating", False):
+            return
         self._theme_animating = True
 
-        is_dark = (new_mode.lower() == "dark")
-        FADE_OUT_STEPS    = 10
-        FADE_OUT_INTERVAL = 10   # ms  → ~100ms fade-out (~100fps equivalent)
-        FADE_IN_STEPS     = 16
-        FADE_IN_INTERVAL  = 14   # ms  → ~224ms fade-in
-        MIN_ALPHA         = 0.10
+        FADE_OUT_STEPS = 8
+        FADE_OUT_MS    = 10
+        FADE_IN_STEPS  = 10
+        FADE_IN_MS     = 12
 
-        def _do_fade_out(step: int):
-            if not self.winfo_exists():
-                return
-            alpha = 1.0 - (1.0 - MIN_ALPHA) * (step / FADE_OUT_STEPS)
+        is_dark = (new_mode.lower() == "dark")
+
+        def _set_alpha(value: float):
             try:
-                self.wm_attributes("-alpha", alpha)
+                self.attributes("-alpha", value)
             except tk.TclError:
                 pass
-            if step < FADE_OUT_STEPS:
-                self.after(FADE_OUT_INTERVAL, lambda: _do_fade_out(step + 1))
-            else:
-                self.after(FADE_OUT_INTERVAL, _apply_theme)
 
-        def _apply_theme():
-            if not self.winfo_exists():
-                return
+        def _do_swap():
             ctk.set_appearance_mode(new_mode)
             if self._theme_toggle_btn and self._theme_toggle_btn.winfo_exists():
                 self._theme_toggle_btn.configure(text="☀️" if is_dark else "🌙")
-            # Odśwież gradienty i kolory po zmianie trybu (CTK potrzebuje chwili)
-            self.after(50, lambda: (_refresh_and_fade_in(),))
-
-        def _refresh_and_fade_in():
-            self._refresh_after_mode_change()
-            _do_fade_in(0)
-
-        def _do_fade_in(step: int):
-            if not self.winfo_exists():
-                return
-            alpha = MIN_ALPHA + (1.0 - MIN_ALPHA) * (step / FADE_IN_STEPS)
             try:
-                self.wm_attributes("-alpha", alpha)
+                self.update_idletasks()
             except tk.TclError:
                 pass
+            self._refresh_after_mode_change()
+
+        def _fade_in(step: int):
+            alpha = step / FADE_IN_STEPS
+            _set_alpha(alpha)
             if step < FADE_IN_STEPS:
-                self.after(FADE_IN_INTERVAL, lambda: _do_fade_in(step + 1))
+                self.after(FADE_IN_MS, lambda: _fade_in(step + 1))
             else:
-                try:
-                    self.wm_attributes("-alpha", 1.0)
-                except tk.TclError:
-                    pass
                 self._theme_animating = False
 
-        _do_fade_out(0)
+        def _fade_out(step: int):
+            # step counts down: FADE_OUT_STEPS → 0  (alpha = step/FADE_OUT_STEPS)
+            alpha = step / FADE_OUT_STEPS
+            _set_alpha(alpha)
+            if step > 0:
+                self.after(FADE_OUT_MS, lambda: _fade_out(step - 1))
+            else:
+                # Fully invisible — perform the swap, then fade back in
+                _do_swap()
+                self.after(FADE_IN_MS, lambda: _fade_in(1))
+
+        _fade_out(FADE_OUT_STEPS - 1)
 
     def _refresh_after_mode_change(self):
         _is_dark = ctk.get_appearance_mode() == "Dark"
@@ -5009,8 +5072,36 @@ class MainWindow(ctk.CTk):
                     _hbg.update_theme()
             except Exception:
                 pass
-        self._load_passwords(self.entry_search.get().strip())
-        self._build_sidebar()
+
+        # Sidebar — indicator canvas (tk.Canvas nie obsługuje tuple CTK)
+        _inactive_ind = "#1a1a1a" if _is_dark else "gray85"
+        for c, ind in list(self._cat_indicators.items()):
+            try:
+                ind.configure(bg=ACCENT if c == self._active_category else _inactive_ind)
+            except tk.TclError:
+                pass
+
+        # Wiersze haseł i karty — CTK nie propaguje automatycznie tuple fg_color
+        # do widgetów zagnieżdżonych w CTkScrollableFrame, dlatego wywołujemy
+        # update_mode() explicite. PasswordCard żyje w pośrednim grid_f (CTkFrame),
+        # dlatego sprawdzamy też dzieci dzieci scroll_frame.
+        for w in self.scroll_frame.winfo_children():
+            if isinstance(w, PasswordRow):
+                try:
+                    w.update_mode(_is_dark)
+                except Exception:
+                    pass
+            elif isinstance(w, ctk.CTkFrame):
+                # Może to być grid_f zawierający PasswordCard
+                try:
+                    for child in w.winfo_children():
+                        if isinstance(child, PasswordCard):
+                            try:
+                                child.update_mode(_is_dark)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
 
     # ──────────────────────────────────────────────
     # KOSZ
