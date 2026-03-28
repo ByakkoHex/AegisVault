@@ -3665,17 +3665,20 @@ class MainWindow(ctk.CTk):
         chk_row.columnconfigure(1, weight=1)
         chk_row.columnconfigure(2, weight=1)
 
+        self._gen_checkboxes = []
         for col, (var, txt) in enumerate([
             (self._gen_upper,   "A-Z"),
             (self._gen_digits,  "0-9"),
             (self._gen_special, "#!@"),
         ]):
-            ctk.CTkCheckBox(
+            chk = ctk.CTkCheckBox(
                 chk_row, text=txt, variable=var,
                 checkbox_width=14, checkbox_height=14,
                 font=ctk.CTkFont(size=10),
                 fg_color=ACCENT, hover_color=ACCENT_HOVER,
-            ).grid(row=0, column=col, sticky="w", padx=(0, 2))
+            )
+            chk.grid(row=0, column=col, sticky="w", padx=(0, 2))
+            self._gen_checkboxes.append(chk)
 
         # Przyciski
         btn_row = ctk.CTkFrame(gen_frame, fg_color="transparent", height=1)
@@ -3691,12 +3694,13 @@ class MainWindow(ctk.CTk):
         ).pack(side="right")
 
         # 📋 Kopiuj — główna akcja, zawsze generuje nowe hasło i kopiuje
-        ctk.CTkButton(
+        self._gen_copy_btn = ctk.CTkButton(
             btn_row, text="📋 Kopiuj", height=28,
             fg_color=ACCENT, hover_color=ACCENT_HOVER,
             corner_radius=8, font=ctk.CTkFont(size=11, weight="bold"),
             command=self._gen_copy
-        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+        )
+        self._gen_copy_btn.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
         # Podgląd wygenerowanego hasła
         self._gen_label = ctk.CTkLabel(
@@ -4803,6 +4807,21 @@ class MainWindow(ctk.CTk):
             if self._clipboard_seconds_left > 0:
                 self._clipboard_label.configure(text_color=ACCENT)
 
+        # ── Generator haseł w sidebarze — zaktualizuj kolory checkboxów i przycisku Kopiuj ──
+        for chk in getattr(self, '_gen_checkboxes', []):
+            try:
+                if chk.winfo_exists():
+                    chk.configure(fg_color=ACCENT, hover_color=ACCENT_HOVER)
+            except Exception:
+                pass
+        _gen_copy_btn = getattr(self, '_gen_copy_btn', None)
+        if _gen_copy_btn:
+            try:
+                if _gen_copy_btn.winfo_exists():
+                    _gen_copy_btn.configure(fg_color=ACCENT, hover_color=ACCENT_HOVER)
+            except Exception:
+                pass
+
         # Odśwież hex backgrounds — wymusza aktualizację bg i kolorów siatki
         # (CTkAppearanceModeTracker obsługuje zmianę trybu automatycznie,
         # ale jawne wywołanie gwarantuje poprawność przy każdej zmianie motywu)
@@ -5372,6 +5391,16 @@ class MainWindow(ctk.CTk):
         except Exception:
             pass
         self.db.close()
+        # Cancel all pending after() callbacks before destroy to prevent
+        # "invalid command name" bgerror messages after the window is gone.
+        try:
+            for after_id in self.tk.eval("after info").split():
+                try:
+                    self.after_cancel(after_id)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self.destroy()
 
     def on_close(self):
