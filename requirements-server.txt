@@ -1,0 +1,6 @@
+# AegisVault — zależności serwera synchronizacji
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.1.0
+SQLAlchemy>=2.0.0

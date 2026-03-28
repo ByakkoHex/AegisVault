@@ -1,0 +1,39 @@
+#!/bin/bash
+# postinst — uruchamiany po instalacji pakietu
+
+set -e
+
+case "$1" in
+    configure)
+        # Ustaw uprawnienia wykonywania
+        chmod +x /usr/bin/aegisvault 2>/dev/null || true
+        chmod +x /usr/share/aegisvault/native_host/install/install.py 2>/dev/null || true
+
+        # Odśwież bazę desktop entries
+        if command -v update-desktop-database &>/dev/null; then
+            update-desktop-database -q /usr/share/applications
+        fi
+
+        # Odśwież cache ikon
+        if command -v gtk-update-icon-cache &>/dev/null; then
+            gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
+        fi
+
+        echo ""
+        echo "✅ AegisVault zainstalowany pomyślnie!"
+        echo ""
+        echo "Uruchomienie: aegisvault"
+        echo ""
+        echo "─────────────────────────────────────────────────"
+        echo "Integracja z przeglądarką (autouzupełnianie):"
+        echo ""
+        echo "  python3 /usr/share/aegisvault/native_host/install/install.py"
+        echo ""
+        echo "Następnie załaduj rozszerzenie w Chrome/Firefox."
+        echo "Instrukcja: /usr/share/doc/aegisvault/README.md"
+        echo "─────────────────────────────────────────────────"
+        echo ""
+        ;;
+esac
+
+exit 0

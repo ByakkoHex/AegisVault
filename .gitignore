@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+
+# PyInstaller
+*.spec.bak
+dist/
+build/
+
+# Bazy danych (dane użytkownika — nie commituj!)
+*.db
+*.sqlite
+*.sqlite3
+
+# Logi
+*.log
+
+# Środowiska
+.env
+.env.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Fonty (pobierane automatycznie)
+assets/fonts/*.ttf
+assets/fonts/*.otf
+
+# Native host launchers (generowane przez install.py)
+native_host/aegisvault_host_launcher.bat
+native_host/aegisvault_host_launcher.sh
+native_host/*.json
+
+# Extension polyfill (pobierany osobno)
+extension/lib/browser-polyfill.js
+extension/lib/browser-polyfill.min.js
+
+# Ikony (dodaj własne przed buildem)
+# assets/icon.ico
+# assets/icon.icns
+# extension/icons/*.png
+
+# Backupy i logi użytkownika
+backups/
+logs/
+screeny/
+
+# Pliki robocze / notatki
+perf_plan.md
+todo_app.md
+todo_hexagon.md
+Do zrobienia.txt
+
+# Claude Code (narzędzie deweloperskie)
+.claude/
+
+# Instalator i dist binary
+installer/*.exe
+installer/*.msi
+dist/*.exe
+dist/*.msi
+
+# Serwer — dane lokalne
+server_data.db
+server/.env
+server/config_local.py

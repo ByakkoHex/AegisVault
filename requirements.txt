@@ -1,0 +1,18 @@
+# AegisVault — zależności klienta desktopowego
+customtkinter>=5.2.0
+cryptography>=41.0.0
+bcrypt>=4.1.0
+pyotp>=2.9.0
+qrcode>=7.4
+Pillow>=10.0.0
+pyperclip>=1.8.2
+httpx>=0.27.0
+SQLAlchemy>=2.0.0
+requests>=2.31.0
+pystray>=0.19.0
+tkcalendar>=1.6.1
+keyring>=24.0.0
+winrt-runtime>=3.2.1
+winrt-Windows.Security.Credentials.UI>=3.2.1
+winrt-Windows.Foundation>=3.2.1
+pynput>=1.7.6

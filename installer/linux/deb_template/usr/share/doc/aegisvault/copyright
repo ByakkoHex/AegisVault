@@ -1,0 +1,9 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: AegisVault
+Source: https://github.com/twoj-nick/aegisvault
+
+Files: *
+Copyright: 2025 AegisVault
+License: Proprietary
+
+All rights reserved.

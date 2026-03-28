@@ -1,0 +1,31 @@
+version: "3.9"
+
+# docker-compose.yml — Środowisko deweloperskie / sieć lokalna
+# Użycie: docker compose up -d
+# Serwer dostępny pod: http://localhost:8000
+
+services:
+  aegisvault-server:
+    build:
+      context: ../..          # katalog główny projektu
+      dockerfile: deploy/docker/Dockerfile
+    container_name: aegisvault-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"           # dostęp bezpośredni (bez Nginx)
+    volumes:
+      - aegisvault-data:/data  # trwałe przechowywanie bazy danych
+    env_file:
+      - .env
+    environment:
+      DB_PATH: /data/server_data.db
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  aegisvault-data:
+    driver: local

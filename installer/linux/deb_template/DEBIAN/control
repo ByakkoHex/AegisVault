@@ -1,0 +1,21 @@
+Package: aegisvault
+Version: VERSION_PLACEHOLDER
+Architecture: amd64
+Maintainer: AegisVault <noreply@aegisvault.pl>
+Depends: python3 (>= 3.10), python3-pip, libx11-xcb1, libxcb-xinerama0, libfontconfig1, libglib2.0-0
+Recommends: python3-tk
+Section: utils
+Priority: optional
+Homepage: https://github.com/twoj-nick/aegisvault
+Description: AegisVault — Bezpieczny menedżer haseł
+ Menedżer haseł z szyfrowaniem AES-256, uwierzytelnianiem
+ dwuskładnikowym (TOTP/2FA) i opcjonalną synchronizacją
+ między urządzeniami. Obsługuje wtyczkę przeglądarkową
+ do automatycznego uzupełniania formularzy logowania.
+ .
+ Funkcje:
+  - Szyfrowanie AES-256 (Fernet)
+  - PBKDF2-HMAC-SHA256 (480 000 iteracji)
+  - Uwierzytelnianie 2FA / TOTP
+  - Auto-lock (5 minut bezczynności)
+  - Integracja z Chrome, Firefox, Edge

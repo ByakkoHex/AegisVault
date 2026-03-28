@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=AegisVault
+GenericName=Menedżer haseł
+Comment=Bezpieczny menedżer haseł z szyfrowaniem AES-256
+Exec=/usr/bin/aegisvault
+Icon=aegisvault
+Categories=Utility;Security;
+Keywords=hasło;password;bezpieczeństwo;security;szyfrowanie;
+StartupNotify=true
+StartupWMClass=AegisVault

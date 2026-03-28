@@ -1,0 +1,35 @@
+#!/bin/bash
+# prerm — uruchamiany przed deinstalacją pakietu
+
+set -e
+
+case "$1" in
+    remove|purge)
+        # Zamknij aplikację jeśli działa
+        if pgrep -x "aegisvault" &>/dev/null; then
+            echo "Zamykanie AegisVault..."
+            pkill -x "aegisvault" || true
+            sleep 1
+        fi
+
+        # Odrejestruj native messaging host ze wszystkich przeglądarek
+        if [ -f /usr/share/aegisvault/native_host/install/uninstall.py ]; then
+            python3 /usr/share/aegisvault/native_host/install/uninstall.py 2>/dev/null || true
+        fi
+        ;;
+esac
+
+case "$1" in
+    purge)
+        # Wyczyść dane systemowe (nie dane użytkownika w ~/)
+        rm -rf /etc/aegisvault 2>/dev/null || true
+
+        echo ""
+        echo "Uwaga: dane użytkownika NIE zostały usunięte."
+        echo "Aby usunąć ręcznie:"
+        echo "  rm -rf ~/.local/share/aegisvault"
+        echo ""
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,248 @@
+name: Build & Package AegisVault
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # JOB 1: Budowanie binarek PyInstaller (3 platformy)
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: pyinstaller-windows
+          - os: macos-latest
+            artifact: pyinstaller-macos
+          - os: ubuntu-latest
+            artifact: pyinstaller-linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            python3-tk libxcb-xinerama0 libxcb1 libx11-xcb1 \
+            xvfb libglib2.0-0 libfontconfig1
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller aegisvault.spec --noconfirm
+
+      - name: Upload PyInstaller artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/AegisVault/
+
+      - name: Upload PyInstaller artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/AegisVault.app/
+
+      - name: Upload PyInstaller artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/aegisvault
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2: Instalator Windows (Inno Setup → .exe)
+  # ─────────────────────────────────────────────────────────────
+  package-windows:
+    name: Package Windows Installer
+    needs: build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download PyInstaller artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pyinstaller-windows
+          path: dist/AegisVault/
+
+      - name: Get version from manifest
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content extension/manifest.json | ConvertFrom-Json).version
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+        shell: pwsh
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\iscc.exe"
+          & $iscc /DAppVersion=${{ steps.version.outputs.version }} installer\windows\aegisvault.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: dist/AegisVault-Setup-*.exe
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3: Instalator macOS (DMG)
+  # ─────────────────────────────────────────────────────────────
+  package-macos:
+    name: Package macOS DMG
+    needs: build
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download PyInstaller artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pyinstaller-macos
+          path: dist/AegisVault.app/
+
+      - name: Build DMG
+        run: bash installer/macos/build_dmg.sh
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos
+          path: dist/AegisVault-*.dmg
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 4: Pakiet Linux (.deb)
+  # ─────────────────────────────────────────────────────────────
+  package-linux:
+    name: Package Linux .deb
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download PyInstaller artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pyinstaller-linux
+          path: dist/
+
+      - name: Fix permissions
+        run: chmod +x dist/aegisvault
+
+      - name: Install fakeroot
+        run: sudo apt-get install -y fakeroot
+
+      - name: Build .deb
+        run: bash installer/linux/build_deb.sh
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux
+          path: dist/aegisvault_*.deb
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 5: Rozszerzenie przeglądarkowe (ZIP)
+  # ─────────────────────────────────────────────────────────────
+  package-extension:
+    name: Package Browser Extension
+    runs-on: ubuntu-latest
+    # Niezależne od build — rozszerzenie nie wymaga PyInstaller
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for polyfill
+        run: |
+          if [ ! -f extension/lib/browser-polyfill.js ]; then
+            echo "[WARN] browser-polyfill.js nie istnieje — pobieranie..."
+            mkdir -p extension/lib
+            curl -L -o extension/lib/browser-polyfill.js \
+              https://unpkg.com/webextension-polyfill@latest/dist/browser-polyfill.min.js
+          fi
+
+      - name: Package extension
+        run: bash installer/extension/build_extension.sh
+
+      - name: Upload extension ZIPs
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-extension
+          path: |
+            dist/extension-chrome-*.zip
+            dist/extension-firefox-*.zip
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 6: GitHub Release (tylko dla tagów v*)
+  # ─────────────────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [package-windows, package-macos, package-linux, package-extension]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            installer-windows/AegisVault-Setup-*.exe
+            installer-macos/AegisVault-*.dmg
+            installer-linux/aegisvault_*.deb
+            installer-extension/extension-chrome-*.zip
+            installer-extension/extension-firefox-*.zip
+          generate_release_notes: true
+          body: |
+            ## AegisVault ${{ github.ref_name }}
+
+            ### Pliki do pobrania
+
+            | System | Plik | Opis |
+            |--------|------|------|
+            | Windows | `AegisVault-Setup-*.exe` | Instalator (Inno Setup) |
+            | macOS | `AegisVault-*.dmg` | Obraz dysku |
+            | Linux | `aegisvault_*.deb` | Pakiet Debian/Ubuntu |
+            | Chrome/Edge | `extension-chrome-*.zip` | Rozszerzenie przeglądarki |
+            | Firefox | `extension-firefox-*.zip` | Rozszerzenie przeglądarki |
+
+            ### Pierwsze uruchomienie
+            Szczegółowa instrukcja instalacji: [INSTALLATION.md](https://github.com/${{ github.repository }}/blob/main/docs/INSTALLATION.md)

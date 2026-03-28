@@ -1,0 +1,17 @@
+# Normalize line endings
+* text=auto
+
+# Scripts — Unix LF
+*.sh text eol=lf
+*.py text eol=lf
+
+# Windows scripts — CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries
+*.ico binary
+*.png binary
+*.jpg binary
+*.exe binary
+*.dll binary

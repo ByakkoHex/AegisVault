@@ -1,0 +1,36 @@
+version: "3.9"
+
+# docker-compose.prod.yml — Środowisko produkcyjne (VPS z domeną i SSL)
+#
+# Użycie:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Wymagania:
+#   1. Ustaw DOMAIN i CERTBOT_EMAIL w pliku .env
+#   2. Uruchom: bash scripts/init_ssl.sh  (jednorazowo — pobiera certyfikat)
+#   3. Następnie uruchom powyższe polecenie compose
+
+services:
+  aegisvault-server:
+    ports: []                  # usuwa mapowanie portu 8000 na host — dostęp tylko przez Nginx
+    environment:
+      UVICORN_WORKERS: "4"     # więcej workerów na produkcji
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: aegisvault-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/aegisvault.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro    # certyfikaty Let's Encrypt z hosta
+      - nginx-cache:/var/cache/nginx
+    depends_on:
+      aegisvault-server:
+        condition: service_healthy
+
+volumes:
+  nginx-cache:
+    driver: local
