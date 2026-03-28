@@ -21,9 +21,11 @@ _PLATFORM_EXT = {
 
 
 def _parse_version(v: str) -> tuple:
-    """Zamienia "1.2.3" na (1, 2, 3) do porównania."""
+    """Zamienia "1.2.3" lub "1.2.3_aa" na (1, 2, 3) do porównania."""
     try:
-        return tuple(int(x) for x in v.strip().lstrip("v").split("."))
+        import re
+        parts = v.strip().lstrip("v").split(".")
+        return tuple(int(re.sub(r"[^0-9].*", "", x) or "0") for x in parts)
     except Exception:
         return (0, 0, 0)
 
