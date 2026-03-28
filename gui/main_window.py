@@ -2387,7 +2387,10 @@ class MainWindow(ctk.CTk):
         self._cat_indicators  = {}     # left-border wskaźniki kategorii (VS Code-style)
         self._top_separator   = None   # gradient separator pod topbarem
         self._content_grad    = None   # gradient tła głównej treści
-        self._update_btn      = None   # przycisk aktualizacji (ukryty do czasu wykrycia)
+        self._update_btn           = None   # przycisk aktualizacji (ukryty do czasu wykrycia)
+        self._update_info          = None   # ostatnio wykryta info o wersji
+        self._last_notified_version = None  # wersja, dla której już pokazano powiadomienie
+        self._first_update_done    = False  # czy pierwsze sprawdzenie już minęło
         self._update_dropdown = None   # referencja do otwartego dropdown panelu
         self._logo_label      = None   # logo w topbarze (rekolorowane z akcentem)
         self._sync_dot_canvas = None   # Canvas z kropką statusu sync
@@ -2511,21 +2514,57 @@ class MainWindow(ctk.CTk):
         if last and last != APP_VERSION:
             ChangelogDialog(self, APP_VERSION, APP_CHANGELOG, accent=ACCENT)
 
+    _UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000  # 4 godziny
+
     def _bg_check_update(self):
         """Wątek tła — sprawdza GitHub Releases pod kątem nowej wersji."""
         info = check_for_update()
-        if info:
-            self.after(0, lambda: self._on_update_found(info))
+        try:
+            if info:
+                self.after(0, lambda: self._on_update_found(info))
+            else:
+                self.after(0, self._schedule_next_update_check)
+        except tk.TclError:
+            pass
+
+    def _schedule_next_update_check(self):
+        """Planuje kolejne sprawdzenie aktualizacji za 4 godziny."""
+        self._first_update_done = True
+        try:
+            self.after(self._UPDATE_INTERVAL_MS,
+                       lambda: threading.Thread(target=self._bg_check_update, daemon=True).start())
+        except tk.TclError:
+            pass
 
     def _on_update_found(self, info: dict):
         """Wywoływane w wątku GUI gdy wykryto nową wersję."""
         self._update_info = info
+        new_ver = info.get("version", "")
 
-        # Pokaż ikonkę w top barze
-        self._update_btn.pack(side="right", padx=(0, 8))
+        # Pokaż ikonkę aktualizacji w topbarze
+        try:
+            self._update_btn.pack(side="right", padx=(0, 8))
+        except tk.TclError:
+            pass
 
-        # Popup po zalogowaniu — po chwili żeby okno zdążyło się załadować
-        self.after(1500, self._show_update_notification)
+        # Powiadom tylko raz na daną wersję
+        if new_ver != self._last_notified_version:
+            self._last_notified_version = new_ver
+            if not self._first_update_done:
+                # Pierwsze sprawdzenie po logowaniu — popup
+                self.after(1500, self._show_update_notification)
+            else:
+                # Wykrycie w tle (app działa) — toast nieinwazyjny
+                try:
+                    self._toast.show(
+                        f"Dostępna nowa wersja {new_ver}!  Kliknij ⬆ aby pobrać.",
+                        kind="info",
+                        duration=8000,
+                    )
+                except Exception:
+                    pass
+
+        self._schedule_next_update_check()
 
     def _show_update_notification(self):
         """Pokazuje przyjazny popup 'Hej! Jest nowa wersja'."""
