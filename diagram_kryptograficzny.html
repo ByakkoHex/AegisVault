@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Diagram kryptograficzny — Password Manager</title>
+<style>
+  body {
+    margin: 0;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+
+  .canvas {
+    width: 860px;
+    padding: 40px 40px 32px;
+    background: #fff;
+  }
+
+  .title {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin-bottom: 36px;
+  }
+
+  /* ── MAIN FLOW ── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    position: relative;
+  }
+
+  /* NODE */
+  .node {
+    border-radius: 10px;
+    padding: 11px 22px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 200px;
+    position: relative;
+  }
+
+  .node.input {
+    background: #ebf4ff;
+    border: 2px solid #2c5282;
+    color: #1a365d;
+  }
+
+  .node.process {
+    background: #faf5ff;
+    border: 2px solid #6b46c1;
+    color: #44337a;
+    min-width: 280px;
+  }
+
+  .node.key {
+    background: #fff5f5;
+    border: 2px solid #c53030;
+    color: #c53030;
+    min-width: 220px;
+  }
+
+  .node.process2 {
+    background: #f0fff4;
+    border: 2px solid #276749;
+    color: #1c4532;
+    min-width: 280px;
+  }
+
+  .node.output {
+    background: #1a202c;
+    border: 2px solid #1a202c;
+    color: #ffffff;
+    min-width: 220px;
+  }
+
+  .node.db {
+    background: #276749;
+    border: 2px solid #276749;
+    color: #ffffff;
+    min-width: 180px;
+    border-radius: 8px;
+  }
+
+  .node small {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.75;
+    margin-top: 3px;
+  }
+
+  /* ARROW DOWN */
+  .arrow-down {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .arrow-down .line {
+    width: 2px;
+    height: 20px;
+    background: #718096;
+  }
+
+  .arrow-down .tip {
+    width: 0;
+    height: 0;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 9px solid #718096;
+  }
+
+  .arrow-down .label {
+    font-size: 10.5px;
+    color: #4a5568;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin: 3px 0;
+    white-space: nowrap;
+  }
+
+  /* ── SPLIT ROW for AES output + server branch ── */
+  .split-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    width: 100%;
+    margin-top: 0;
+    position: relative;
+  }
+
+  .main-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* horizontal connector */
+  .h-line {
+    height: 2px;
+    background: #718096;
+    width: 80px;
+    margin-top: 22px; /* align with center of node */
+  }
+
+  .server-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .v-line-server {
+    width: 2px;
+    height: 20px;
+    background: #718096;
+  }
+
+  .node.server-see {
+    background: #fff5f5;
+    border: 2px dashed #e53e3e;
+    color: #c53030;
+    min-width: 200px;
+    border-radius: 10px;
+    padding: 11px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .cross-badge {
+    display: inline-block;
+    background: #e53e3e;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    margin-right: 4px;
+  }
+
+  /* IV row */
+  .iv-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .iv-badge {
+    background: #e6fffa;
+    border: 1.5px solid #38b2ac;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 11.5px;
+    color: #234e52;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .plus {
+    font-size: 18px;
+    color: #718096;
+    font-weight: 300;
+  }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin-top: 28px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11.5px;
+    color: #4a5568;
+  }
+
+  .legend-dot {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .caption {
+    text-align: center;
+    font-size: 12px;
+    color: #555;
+    font-style: italic;
+    margin-top: 20px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #a0aec0;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="title">Rysunek 5. Przepływ kryptograficzny — od hasła masterowego do zaszyfrowanych danych</div>
+
+  <div class="flow">
+
+    <!-- 1. HASŁO MASTEROWE -->
+    <div class="section-label">Dane wejściowe</div>
+    <div class="node input">🔑 Hasło masterowe użytkownika</div>
+
+    <!-- arrow -->
+    <div class="arrow-down">
+      <div class="line"></div>
+      <div class="label">+ losowa sól (16 bajtów)</div>
+      <div class="line" style="height:8px"></div>
+      <div class="tip"></div>
+    </div>
+
+    <!-- 2. PBKDF2 -->
+    <div class="section-label">Faza 1 — Derywacja klucza</div>
+    <div class="node process">
+      ⚙️ PBKDF2-HMAC-SHA256
+      <small>100 000 iteracji · sól 16 B · wyjście 32 B</small>
+    </div>
+
+    <div class="arrow-down">
+      <div class="line"></div>
+      <div class="tip"></div>
+    </div>
+
+    <!-- 3. KLUCZ AES -->
+    <div class="node key">
+      🗝️ Klucz AES-256 (32 bajty)
+      <small>przechowywany wyłącznie w pamięci RAM</small>
+    </div>
+
+    <div class="arrow-down">
+      <div class="line"></div>
+      <div class="label">+ losowy IV (16 bajtów, nowy dla każdego wpisu)</div>
+      <div class="line" style="height:8px"></div>
+      <div class="tip"></div>
+    </div>
+
+    <!-- 4. AES-GCM -->
+    <div class="section-label">Faza 2 — Szyfrowanie danych</div>
+    <div class="iv-row">
+      <div class="node process2" style="min-width:300px;">
+        🔒 AES-256-GCM
+        <small>tryb uwierzytelniony · tag integralności 16 B</small>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;margin-left:10px;">
+        <div style="font-size:11px;color:#718096;">wejście:</div>
+        <div class="iv-badge">📄 plaintext<br>(login + hasło)</div>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <div class="line"></div>
+      <div class="tip"></div>
+    </div>
+
+    <!-- 5. SPLIT: zaszyfrowane dane + gałąź serwer -->
+    <div class="split-row">
+
+      <div class="main-col">
+        <!-- zaszyfrowane dane -->
+        <div class="node output">
+          🔐 Zaszyfrowane dane (Base64)
+          <small>sól + IV + tag GCM + ciphertext</small>
+        </div>
+
+        <!-- arrow do SQLite -->
+        <div class="arrow-down">
+          <div class="line"></div>
+          <div class="tip"></div>
+        </div>
+
+        <div class="node db">🗄️ SQLite — tabela passwords</div>
+      </div>
+
+      <!-- pozioma gałąź do serwera -->
+      <div style="display:flex;align-items:flex-start;margin-top:18px;">
+        <div class="h-line"></div>
+        <div class="server-col">
+          <div style="font-size:10px;color:#e53e3e;font-weight:700;text-align:center;margin-bottom:6px;">Synchronizacja</div>
+          <div class="node server-see">
+            <span class="cross-badge">✕</span> Serwer widzi tylko:<br>
+            <code style="font-size:12px;">encrypted_blob</code>
+            <div style="margin-top:6px;font-size:10.5px;color:#742a2a;font-weight:400;">
+              Klucz AES ❌ nie jest przesyłany<br>
+              Dane ❌ nie są czytelne dla serwera
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- LEGENDA -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ebf4ff;border:2px solid #2c5282;"></div>
+      Dane wejściowe
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#faf5ff;border:2px solid #6b46c1;"></div>
+      Operacja kryptograficzna
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#fff5f5;border:2px solid #c53030;"></div>
+      Klucz — tylko w pamięci RAM
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#f0fff4;border:2px solid #276749;"></div>
+      Szyfrowanie danych
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#1a202c;border:2px solid #1a202c;"></div>
+      Zaszyfrowane wyjście
+    </div>
+  </div>
+
+  <div class="caption">Źródło: opracowanie własne</div>
+</div>
+</body>
+</html>

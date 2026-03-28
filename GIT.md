@@ -12,6 +12,14 @@ git commit -m "Opis zmiany"
 
 # 3. Push
 git push
+
+  Teraz w terminalu:
+
+  git add version.py server/app_version.json extension/manifest.json GIT.md
+  git commit -m "Bump version to 1.2.0"
+  git push
+  git tag v1.2.0
+  git push origin v1.2.0
 ```
 
 ## Przydatne komendy
