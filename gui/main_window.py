@@ -2412,9 +2412,8 @@ class MainWindow(ctk.CTk):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _bg_check_update(self):
-        """Wątek tła — sprawdza serwer synchronizacji pod kątem nowej wersji."""
-        server_url = self.sync_client.server_url
-        info = check_for_update(server_url)
+        """Wątek tła — sprawdza GitHub Releases pod kątem nowej wersji."""
+        info = check_for_update()
         if info:
             self.after(0, lambda: self._on_update_found(info))
 
