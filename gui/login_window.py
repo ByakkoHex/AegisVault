@@ -75,6 +75,25 @@ class LoginWindow(ctk.CTk):
             pass
         super().destroy()
 
+    def _make_logo_image(self, accent: str, size: int = 64) -> ctk.CTkImage:
+        """Ładuje icon.png i rekoloruje nieprzezroczyste piksele na kolor akcentu."""
+        import os as _os
+        _icon_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "assets", "icon.png")
+        try:
+            img = Image.open(_icon_path).convert("RGBA").resize((size, size), Image.LANCZOS)
+            r = int(accent[1:3], 16)
+            g = int(accent[3:5], 16)
+            b = int(accent[5:7], 16)
+            pixels = img.load()
+            for y in range(img.height):
+                for x in range(img.width):
+                    _, _, _, a = pixels[x, y]
+                    if a > 10:
+                        pixels[x, y] = (r, g, b, a)
+            return ctk.CTkImage(light_image=img, dark_image=img, size=(size, size))
+        except Exception:
+            return None
+
     def _build_ui(self):
         # Lewy gradient — od koloru akcentu do tła okna (adaptive dark/light)
         _login_bg = "#212121" if ctk.get_appearance_mode() == "Dark" else "#f0f0f0"
@@ -99,13 +118,12 @@ class LoginWindow(ctk.CTk):
         # Hexagonalne tło całego okna — widoczne w obszarze ikony/tytułu
         apply_hex_to_window(self, hex_size=32, glow_max=3, glow_interval_ms=1600)
 
-        # Logo i tytuł — ładuje icon.png z assets/ lub fallback na emoji
+        # Logo i tytuł — ładuje icon.png z assets/, rekoloruje na kolor akcentu
         import os as _os
         _icon_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "assets", "icon.png")
         _has_logo = _os.path.exists(_icon_path)
         if _has_logo:
-            _pil_img = Image.open(_icon_path).resize((64, 64), Image.LANCZOS)
-            _ctk_img = ctk.CTkImage(light_image=_pil_img, dark_image=_pil_img, size=(64, 64))
+            _ctk_img = self._make_logo_image(self._accent, size=64)
             self.label_icon = ctk.CTkLabel(self.main_frame, image=_ctk_img, text="")
         else:
             self.label_icon = ctk.CTkLabel(
