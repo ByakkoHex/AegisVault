@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.2.0",
   "download_url": "https://example.com/aegisvault-setup.exe",
   "changelog": "- Naprawa kodu QR dla 2FA (lepsza kompatybilność ze skanerami)\n- Pierwsze stabilne wydanie\n- Synchronizacja haseł\n- Windows Hello\n- Push 2FA\n- Import z LastPass/Bitwarden/1Password"
 }
