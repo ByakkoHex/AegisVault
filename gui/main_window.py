@@ -19,7 +19,9 @@ from tkinter import filedialog
 import pyperclip
 import threading
 import time
+import os
 from datetime import datetime, date
+from PIL import Image
 
 from database.db_manager import DatabaseManager
 from core.crypto import CryptoManager, generate_password
@@ -2305,6 +2307,7 @@ class MainWindow(ctk.CTk):
         self._content_grad    = None   # gradient tła głównej treści
         self._update_btn      = None   # przycisk aktualizacji (ukryty do czasu wykrycia)
         self._update_dropdown = None   # referencja do otwartego dropdown panelu
+        self._logo_label      = None   # logo w topbarze (rekolorowane z akcentem)
         self._sync_dot_canvas = None   # Canvas z kropką statusu sync
         self._sync_connected  = None   # None=unknown, True=ok, False=offline
         self._sidebar_grad_top = None  # animowany gradient górny sidebara
@@ -2421,8 +2424,9 @@ class MainWindow(ctk.CTk):
         from utils.prefs_manager import PrefsManager
         from gui.changelog_dialog import ChangelogDialog
         prefs = PrefsManager()
-        if prefs.get("last_seen_version") != APP_VERSION:
-            prefs.set("last_seen_version", APP_VERSION)
+        last = prefs.get("last_seen_version")
+        prefs.set("last_seen_version", APP_VERSION)
+        if last and last != APP_VERSION:
             ChangelogDialog(self, APP_VERSION, APP_CHANGELOG, accent=ACCENT)
 
     def _bg_check_update(self):
@@ -3010,6 +3014,15 @@ class MainWindow(ctk.CTk):
     # BUDOWANIE UI
     # ──────────────────────────────────────────────
 
+    def _make_logo_image(self, accent: str, size: int = 30) -> ctk.CTkImage:
+        """Ładuje icon.png i rekoloruje go na bieżący kolor akcentu."""
+        path = os.path.join(os.path.dirname(__file__), "..", "assets", "icon.png")
+        img = Image.open(path).convert("RGBA").resize((size, size), Image.LANCZOS)
+        r, g, b = int(accent[1:3], 16), int(accent[3:5], 16), int(accent[5:7], 16)
+        pixels = img.getdata()
+        img.putdata([(r, g, b, a) if a > 10 else (0, 0, 0, 0) for _, _, _, a in pixels])
+        return ctk.CTkImage(light_image=img, dark_image=img, size=(size, size))
+
     def _build_ui(self):
         # Topbar — gradient tint akcentu (adaptive dark/light)
         _topbar_tint = _blend_accent(ACCENT, _gcard(), 0.18)
@@ -3022,7 +3035,8 @@ class MainWindow(ctk.CTk):
 
         left = ctk.CTkFrame(self._top_frame, fg_color="transparent")
         left.pack(side="left", padx=20, fill="y")
-        ctk.CTkLabel(left, text="🔐", font=ctk.CTkFont(size=22)).pack(side="left", padx=(0, 8))
+        self._logo_label = ctk.CTkLabel(left, text="", image=self._make_logo_image(ACCENT, 30))
+        self._logo_label.pack(side="left", padx=(0, 8))
         self._app_title_label = ctk.CTkLabel(
             left, text="AegisVault",
             font=ctk.CTkFont(size=17, weight="bold"),
@@ -4616,6 +4630,9 @@ class MainWindow(ctk.CTk):
 
         if self._app_title_label and self._app_title_label.winfo_exists():
             self._app_title_label.configure(text_color=(ACCENT, ACCENT))
+
+        if self._logo_label and self._logo_label.winfo_exists():
+            self._logo_label.configure(image=self._make_logo_image(ACCENT, 30))
 
         if self._theme_toggle_btn and self._theme_toggle_btn.winfo_exists():
             self._theme_toggle_btn.configure(
