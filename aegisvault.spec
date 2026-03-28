@@ -179,8 +179,8 @@ elif sys.platform == "darwin":
         icon=icon_path,
         bundle_identifier="pl.aegisvault.AegisVault",
         info_plist={
-            "CFBundleShortVersionString": "1.2.0",
-            "CFBundleVersion": "1.2.0",
+            "CFBundleShortVersionString": "1.2.2",
+            "CFBundleVersion": "1.2.2",
             "NSHighResolutionCapable": True,
         },
     )

@@ -33,7 +33,8 @@ fi
 # ── Utwórz strukturę pakietu ──────────────────────────────────
 BUILD_DIR="${DIST_DIR}/deb_build/${PKG_NAME}"
 rm -rf "${BUILD_DIR}"
-cp -r "${TEMPLATE_DIR}" "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}"
+cp -r "${TEMPLATE_DIR}/." "${BUILD_DIR}/"
 
 # ── Skopiuj pliki aplikacji ───────────────────────────────────
 mkdir -p "${BUILD_DIR}/usr/bin"
