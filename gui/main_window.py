@@ -2304,6 +2304,7 @@ class MainWindow(ctk.CTk):
         self._top_separator   = None   # gradient separator pod topbarem
         self._content_grad    = None   # gradient tła głównej treści
         self._update_btn      = None   # przycisk aktualizacji (ukryty do czasu wykrycia)
+        self._update_dropdown = None   # referencja do otwartego dropdown panelu
         self._sync_dot_canvas = None   # Canvas z kropką statusu sync
         self._sync_connected  = None   # None=unknown, True=ok, False=offline
         self._sidebar_grad_top = None  # animowany gradient górny sidebara
@@ -2421,26 +2422,31 @@ class MainWindow(ctk.CTk):
         """Wywoływane w wątku GUI gdy wykryto nową wersję."""
         self._update_info = info
 
-        # Pokaż przycisk w top barze
+        # Pokaż ikonkę w top barze
         self._update_btn.pack(side="right", padx=(0, 8))
 
-        # Toast z informacją
-        if self._toast:
-            self._toast.show(
-                f"⬆  Dostępna aktualizacja {info['version']} — kliknij przycisk",
-                kind="warning",
-                duration_ms=8000,
-            )
+        # Popup po zalogowaniu — po chwili żeby okno zdążyło się załadować
+        self.after(1500, self._show_update_notification)
 
-        # Automatycznie otwórz dialog z changelogiem po chwili
-        self.after(2500, self._open_update_dialog)
-
-    def _open_update_dialog(self):
-        """Otwiera dialog z informacją o aktualizacji."""
-        from gui.update_dialog import UpdateDialog
+    def _show_update_notification(self):
+        """Pokazuje przyjazny popup 'Hej! Jest nowa wersja'."""
+        from gui.update_dialog import UpdateNotification
         info = getattr(self, "_update_info", None)
         if info:
-            UpdateDialog(self, info)
+            UpdateNotification(self, info)
+
+    def _open_update_dialog(self):
+        """Toggleuje dropdown panel pod ikonką w topbarze."""
+        from gui.update_dialog import UpdateDropdown
+        info = getattr(self, "_update_info", None)
+        if not info:
+            return
+        # Jeśli już otwarty — zamknij
+        if self._update_dropdown and self._update_dropdown.winfo_exists():
+            self._update_dropdown.destroy()
+            self._update_dropdown = None
+            return
+        self._update_dropdown = UpdateDropdown(self, info, self._update_btn)
 
     # ──────────────────────────────────────────────
     # SKRÓTY KLAWISZOWE
@@ -3036,13 +3042,14 @@ class MainWindow(ctk.CTk):
         self._score_ring.bind("<Button-1>", lambda e: self._open_analysis())
         self._score_ring.start_pulse()
 
-        # Przycisk aktualizacji — ukryty domyślnie, pokazywany gdy serwer ma nowszą wersję
+        # Ikonka aktualizacji — ukryta domyślnie, pojawia się po wykryciu nowej wersji
         self._update_btn = ctk.CTkButton(
-            self._top_frame, text="⬆  Aktualizacja",
-            height=34, fg_color=("#f0a500", "#b87800"),
+            self._top_frame, text="⬆",
+            width=36, height=36,
+            fg_color=("#f0a500", "#b87800"),
             hover_color=("#d4920a", "#a06a00"),
             text_color="#ffffff",
-            corner_radius=20, font=ctk.CTkFont(size=12, weight="bold"),
+            corner_radius=18, font=ctk.CTkFont(size=15, weight="bold"),
             command=self._open_update_dialog,
         )
         # Nie pakujemy — pojawi się dopiero po wykryciu aktualizacji
