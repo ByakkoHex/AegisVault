@@ -113,6 +113,41 @@ Filename: "powershell.exe"; \
   RunOnceId: "PostUninstallCleanup"
 
 [Code]
+var
+  IsUpdate: Boolean;
+  PreviousVersion: String;
+
+function GetPreviousVersion(): String;
+var
+  RegKey: String;
+begin
+  RegKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}_is1';
+  Result := '';
+  if not RegQueryStringValue(HKCU, RegKey, 'DisplayVersion', Result) then
+    RegQueryStringValue(HKLM, RegKey, 'DisplayVersion', Result);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  PreviousVersion := GetPreviousVersion();
+  IsUpdate := PreviousVersion <> '';
+  Result := True;
+end;
+
+procedure InitializeWizard();
+begin
+  if IsUpdate then
+  begin
+    WizardForm.Caption := 'Aktualizacja {#AppName} do wersji {#AppVersion}';
+    WizardForm.WelcomeLabel1.Caption := 'Aktualizacja {#AppName}';
+    WizardForm.WelcomeLabel2.Caption :=
+      'Kreator zaktualizuje {#AppName} z wersji ' + PreviousVersion +
+      ' do wersji {#AppVersion}.' + #13#10#13#10 +
+      'Twoje hasła i ustawienia pozostaną niezmienione.' + #13#10#13#10 +
+      'Kliknij Dalej, aby rozpocząć aktualizację.';
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   AppDataPath: String;
