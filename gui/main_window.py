@@ -2352,6 +2352,9 @@ class MainWindow(ctk.CTk):
         # Sprawdź aktualizacje w tle
         threading.Thread(target=self._bg_check_update, daemon=True).start()
 
+        # Pokaż changelog jeśli to pierwsze uruchomienie po aktualizacji
+        self.after(800, self._maybe_show_changelog)
+
         # Auto-backup przy starcie (jeśli czas minął)
         self.after(4000, self._check_auto_backup)
 
@@ -2411,6 +2414,16 @@ class MainWindow(ctk.CTk):
                 pass
 
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _maybe_show_changelog(self):
+        """Pokazuje dialog 'Co nowego' jeśli wersja zmieniła się od ostatniego uruchomienia."""
+        from version import APP_VERSION, APP_CHANGELOG
+        from utils.prefs_manager import PrefsManager
+        from gui.changelog_dialog import ChangelogDialog
+        prefs = PrefsManager()
+        if prefs.get("last_seen_version") != APP_VERSION:
+            prefs.set("last_seen_version", APP_VERSION)
+            ChangelogDialog(self, APP_VERSION, APP_CHANGELOG, accent=ACCENT)
 
     def _bg_check_update(self):
         """Wątek tła — sprawdza GitHub Releases pod kątem nowej wersji."""

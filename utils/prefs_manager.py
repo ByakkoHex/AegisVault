@@ -24,6 +24,7 @@ DEFAULTS: dict = {
     "grid_mode":        False,        # widok siatki (PasswordCard)
     "autotype_delay":    2,                                  # sekundy opóźnienia przed wpisaniem
     "autotype_sequence": "{USERNAME}{TAB}{PASSWORD}{ENTER}", # sekwencja wpisywania
+    "last_seen_version": "",                                 # ostatnia wersja przy której pokazano changelog
 }
 
 THEMES: dict = {
