@@ -237,4 +237,8 @@ Dostępny też **kreator importu** przy pierwszym uruchomieniu aplikacji.
 
 ## Licencja
 
-Projekt inżynierski. Wszelkie prawa zastrzeżone.
+Projekt dostępny na licencji **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+Możesz używać, modyfikować i dystrybuować kod — pod warunkiem że zachowasz tę samą licencję i udostępnisz zmiany (w tym kod serwera jeśli go hostujesz).
+
+Zobacz plik [LICENSE](LICENSE) lub [gnu.org/licenses/agpl-3.0](https://www.gnu.org/licenses/agpl-3.0.html).
