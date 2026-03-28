@@ -1,5 +1,5 @@
 {
-  "version": "1.2.5",
+  "version": "1.2.6",
   "download_url": "https://example.com/aegisvault-setup.exe",
-  "changelog": "- Naprawa kodu QR dla 2FA (lepsza kompatybilność ze skanerami)\n- Pierwsze stabilne wydanie\n- Synchronizacja haseł\n- Windows Hello\n- Push 2FA\n- Import z LastPass/Bitwarden/1Password"
+  "changelog": "- Płynna zmiana koloru akcentu i motywu (zero flashu)\n- Logo w oknie logowania zmienia kolor z akcentem\n- Domyślny kolor akcentu: kobaltowy niebieski (#0F52BA)\n- Automatyczne sprawdzanie aktualizacji co 4h w tle\n- Toast z powiadomieniem o nowej wersji bez restartu\n- Naprawiono bgerror przy zamknięciu aplikacji\n- Naprawiono kolory generatora haseł przy zmianie akcentu"
 }
