@@ -348,7 +348,7 @@ class SettingsWindow(ctk.CTkToplevel):
         # Pasek koloru akcentu (animowany podgląd)
         self._accent_bar = ctk.CTkFrame(
             card2, height=6, corner_radius=3,
-            fg_color=THEMES.get(current, {}).get("accent", "#4F8EF7")
+            fg_color=THEMES.get(current, {}).get("accent", "#0F52BA")
         )
         self._accent_bar.pack(fill="x", padx=16, pady=(0, 12))
 
@@ -404,14 +404,14 @@ class SettingsWindow(ctk.CTkToplevel):
                         text=THEMES.get(self._prefs.get("color_theme"), {}).get("label", "")
                     ),
                     self._accent_bar.configure(
-                        fg_color=THEMES.get(self._prefs.get("color_theme"), {}).get("accent", "#4F8EF7")
+                        fg_color=THEMES.get(self._prefs.get("color_theme"), {}).get("accent", "#0F52BA")
                     ),
                 ),
                 add="+",
             )
 
         # ── Własny kolor hex ─────────────────────────────────────────────
-        current_accent = THEMES.get(current, {}).get("accent", "#4F8EF7")
+        current_accent = THEMES.get(current, {}).get("accent", "#0F52BA")
 
         hex_row = ctk.CTkFrame(card2, fg_color="transparent")
         hex_row.pack(fill="x", padx=16, pady=(0, 12))
@@ -820,7 +820,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         tdata = self._prefs.get_theme_colors()
         self._theme_name_lbl.configure(text=tdata.get("label", ""))
-        _new_accent = tdata.get("accent", "#4F8EF7")
+        _new_accent = tdata.get("accent", "#0F52BA")
         self._accent_bar.configure(fg_color=_new_accent)
 
         # ── Live update nagłówka tego okna ───────────────────────────

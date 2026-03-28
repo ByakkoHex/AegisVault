@@ -9,8 +9,8 @@ import webbrowser
 import tkinter as tk
 import customtkinter as ctk
 
-ACCENT       = "#4F8EF7"
-ACCENT_HOVER = "#3a7ae0"
+ACCENT       = "#0F52BA"
+ACCENT_HOVER = "#0C4398"
 DARK_CARD    = "#1e1e1e"
 DARK_BG      = "#1a1a1a"
 LIGHT_CARD   = "#ffffff"

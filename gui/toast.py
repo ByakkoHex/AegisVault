@@ -32,7 +32,7 @@ _COLORS = {
     "success": "#4caf50",
     "error":   "#e05252",
     "warning": "#f0a500",
-    "info":    "#4F8EF7",
+    "info":    "#0F52BA",
 }
 
 _TOAST_W   = 320
@@ -81,7 +81,7 @@ class _Toast(tk.Toplevel):
         except tk.TclError:
             self._alpha_ok = False
 
-        color = _COLORS.get(kind, "#4F8EF7")
+        color = _COLORS.get(kind, "#0F52BA")
         icon  = _ICONS.get(kind, "ℹ")
 
         is_dark = ctk.get_appearance_mode() == "Dark"

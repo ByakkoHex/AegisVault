@@ -295,7 +295,7 @@ def animate_color(widget,
         interval_ms   — czas między klatkami
 
     Przykład:
-        animate_color(btn, "#4F8EF7", "#38A169",
+        animate_color(btn, "#0F52BA", "#38A169",
                       lambda c: btn.configure(fg_color=c))
     """
     r1, g1, b1 = _parse_hex(from_color)
@@ -563,9 +563,9 @@ def ripple_copy(widget, duration_ms: int = 180):
         if isinstance(bg, (list, tuple)):
             bg = bg[1] if ctk.get_appearance_mode() == "Dark" else bg[0]
         if not bg or not str(bg).startswith("#"):
-            bg = "#4F8EF7"
+            bg = "#0F52BA"
     except Exception:
-        bg = "#4F8EF7"
+        bg = "#0F52BA"
 
     try:
         bg_rgb = _parse_hex(bg)

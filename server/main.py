@@ -351,13 +351,13 @@ def _push_html(username: str, token: str, remaining: int, error: str = "") -> st
     h1{{font-size:24px;font-weight:700;margin-bottom:4px}}
     .sub{{color:#888;font-size:14px;margin-bottom:20px}}
     .username{{background:#252525;border-radius:10px;padding:14px;
-               margin-bottom:20px;font-size:20px;font-weight:700;color:#4F8EF7}}
+               margin-bottom:20px;font-size:20px;font-weight:700;color:#0F52BA}}
     .info{{color:#aaa;font-size:13px;margin-bottom:22px}}
     .btn{{width:100%;padding:16px;border:none;border-radius:12px;
           font-size:16px;font-weight:700;cursor:pointer;margin-bottom:10px;
           transition:opacity .15s}}
     .btn:hover{{opacity:.85}}
-    .approve{{background:#4F8EF7;color:#fff}}
+    .approve{{background:#0F52BA;color:#fff}}
     .deny{{background:#2a2a2a;color:#888;border:1px solid #3a3a3a}}
     .timer{{font-size:12px;color:#555;margin-top:14px}}
   </style>

@@ -6,8 +6,8 @@ Pokazywany raz po uruchomieniu aplikacji w nowej wersji.
 
 import customtkinter as ctk
 
-ACCENT       = "#4F8EF7"
-ACCENT_HOVER = "#3a7ae0"
+ACCENT       = "#0F52BA"
+ACCENT_HOVER = "#0C4398"
 GREEN        = "#4caf50"
 DARK_CARD    = "#1e1e1e"
 LIGHT_CARD   = "#ffffff"

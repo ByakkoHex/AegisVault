@@ -7,8 +7,8 @@ import customtkinter as ctk
 from gui.animations import slide_fade_in
 from gui.gradient import AnimatedGradientCanvas
 
-ACCENT       = "#4F8EF7"
-ACCENT_HOVER = "#3a7ae0"
+ACCENT       = "#0F52BA"
+ACCENT_HOVER = "#0C4398"
 BTN_RED      = "#e05252"
 BTN_RED_HOVER= "#c43e3e"
 BTN_GRAY     = "#3a3a3a"
@@ -24,9 +24,9 @@ ICONS = {
 
 COLOR_ICON = {
     "error":   "#e05252",
-    "info":    "#4F8EF7",
+    "info":    "#0F52BA",
     "warning": "#f0a500",
-    "question":"#4F8EF7",
+    "question":"#0F52BA",
     "success": "#4caf50",
 }
 

@@ -11,7 +11,7 @@ from utils.paths import get_app_data_dir
 
 DEFAULTS: dict = {
     "color_theme":      "blue",
-    "accent_custom":    "#4F8EF7",   # używane gdy color_theme == "custom"
+    "accent_custom":    "#0F52BA",   # używane gdy color_theme == "custom"
     "compact_mode":     False,
     "ctrl_w_action":    "minimize",   # "minimize" | "close"
     "autostart":        False,
@@ -29,7 +29,7 @@ DEFAULTS: dict = {
 
 THEMES: dict = {
     # Zimne
-    "blue":    {"accent": "#4F8EF7", "hover": "#3a7ae0", "label": "Niebieski"},
+    "blue":    {"accent": "#0F52BA", "hover": "#0C4398", "label": "Niebieski"},
     "cyan":    {"accent": "#00B5D8", "hover": "#0090b0", "label": "Cyjan"},
     "teal":    {"accent": "#319795", "hover": "#2c7a7b", "label": "Morski"},
     "indigo":  {"accent": "#5A67D8", "hover": "#4756c4", "label": "Indygo"},
@@ -77,17 +77,17 @@ class PrefsManager:
 
     def get_accent(self) -> str:
         if self._data.get("color_theme") == "custom":
-            return self._data.get("accent_custom", "#4F8EF7")
+            return self._data.get("accent_custom", "#0F52BA")
         return THEMES.get(self._data.get("color_theme", "blue"), THEMES["blue"])["accent"]
 
     def get_accent_hover(self) -> str:
         if self._data.get("color_theme") == "custom":
-            return self._darken_color(self._data.get("accent_custom", "#4F8EF7"))
+            return self._darken_color(self._data.get("accent_custom", "#0F52BA"))
         return THEMES.get(self._data.get("color_theme", "blue"), THEMES["blue"])["hover"]
 
     def get_theme_colors(self) -> dict:
         if self._data.get("color_theme") == "custom":
-            acc = self._data.get("accent_custom", "#4F8EF7")
+            acc = self._data.get("accent_custom", "#0F52BA")
             return {"accent": acc, "hover": self._darken_color(acc), "label": "Własny"}
         return THEMES.get(self._data.get("color_theme", "blue"), THEMES["blue"])
 

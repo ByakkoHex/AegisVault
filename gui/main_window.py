@@ -617,7 +617,7 @@ _CAT_PRESET_COLORS = [
     "#D69E2E",  # żółty
     "#38A169",  # zielony
     "#3182CE",  # niebieski
-    "#4F8EF7",  # accent blue
+    "#0F52BA",  # accent blue
     "#805AD5",  # fioletowy
     "#D53F8C",  # różowy
     "#2D3748",  # ciemnoszary
