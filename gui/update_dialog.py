@@ -259,13 +259,14 @@ class UpdateDropdown(tk.Toplevel):
 
     def _position(self, anchor):
         """Pozycjonuje panel poniżej anchor widgetu, nie wychodząc poza ekran."""
+        self.update_idletasks()
         anchor.update_idletasks()
         ax = anchor.winfo_rootx()
-        ay = anchor.winfo_rooty() + anchor.winfo_height() + 6
-        w  = self.winfo_reqwidth()
+        ay = anchor.winfo_rooty() + anchor.winfo_height() + 4
         sw = self.winfo_screenwidth()
+        w  = self.winfo_reqwidth() or self.WIDTH
         x  = min(ax, sw - w - 8)
-        self.geometry(f"{self.WIDTH}x+{x}+{ay}")
+        self.geometry(f"+{x}+{ay}")
 
     def _check_focus(self):
         try:

@@ -1203,6 +1203,15 @@ class PasswordCard(ctk.CTkFrame):
             pass
         _do_copy(self.entry, self.db, self.crypto, self.on_copy)
 
+    def update_accent(self, accent: str, accent_hover: str):
+        """Aktualizuje kolor akcentu in-place — bez przebudowy wiersza."""
+        btn = getattr(self, "_copy_btn", None)
+        if btn and btn.winfo_exists():
+            try:
+                btn.configure(fg_color=accent, hover_color=accent_hover)
+            except tk.TclError:
+                pass
+
 
 # ──────────────────────────────────────────────
 # PODGLĄD HASŁA (dymek hover)
@@ -2250,6 +2259,15 @@ class PasswordRow(ctk.CTkFrame):
             _cancel_show(),
             self._preview_win.close() if self._preview_win else None
         ), add="+")
+
+    def update_accent(self, accent: str, accent_hover: str):
+        """Aktualizuje kolor akcentu in-place — bez przebudowy wiersza."""
+        btn = getattr(self, "_copy_btn", None)
+        if btn and btn.winfo_exists():
+            try:
+                btn.configure(fg_color=accent, hover_color=accent_hover)
+            except tk.TclError:
+                pass
 
 
 # ──────────────────────────────────────────────
@@ -3896,19 +3914,28 @@ class MainWindow(ctk.CTk):
         # HexBackground jest tłem — pomijamy go, żeby przeżył każdy reload listy.
         _old = [w for w in self.scroll_frame.winfo_children()
                 if not isinstance(w, HexBackground)]
-        for w in _old:
-            try:
-                w.pack_forget()
-            except tk.TclError:
-                pass
 
-        def _cleanup_old():
+        if not animate:
+            # Tryb bez animacji — zniszcz stare widgety od razu, zero flash.
             for w in _old:
                 try:
                     w.destroy()
                 except tk.TclError:
                     pass
-        self.after(0, _cleanup_old)
+        else:
+            for w in _old:
+                try:
+                    w.pack_forget()
+                except tk.TclError:
+                    pass
+
+            def _cleanup_old():
+                for w in _old:
+                    try:
+                        w.destroy()
+                    except tk.TclError:
+                        pass
+            self.after(0, _cleanup_old)
 
         if query:
             # Wczytaj wszystkie wpisy z aktywnej kategorii, potem filtruj lokalnie przez rapidfuzz
@@ -4079,7 +4106,7 @@ class MainWindow(ctk.CTk):
 
         _target_h = 36 if self._compact_mode else 74
         _row_pady = 1 if self._compact_mode else 3
-        _stagger  = 12  # ms między wierszami (max łącznie 250ms)
+        _stagger  = 8   # ms między wierszami
 
         # ── Sekcja "Ostatnio używane" ─────────────────────────────────
         # Pokazuj TYLKO gdy: brak query, kategoria "Wszystkie"
@@ -4116,7 +4143,7 @@ class MainWindow(ctk.CTk):
                     )
                     row.pack(fill="x", pady=_row_pady, padx=4)
                     if animate:
-                        slide_in_row(row, _target_h, delay_ms=min(idx * _stagger, 100))
+                        slide_in_row(row, _target_h, delay_ms=min(idx * _stagger, 80))
 
                 # Cienki separator po sekcji
                 ctk.CTkFrame(
@@ -4137,7 +4164,7 @@ class MainWindow(ctk.CTk):
             )
             row.pack(fill="x", pady=_row_pady, padx=4)
             if animate:
-                slide_in_row(row, _target_h, delay_ms=min(idx * _stagger, 250))
+                slide_in_row(row, _target_h, delay_ms=min(idx * _stagger, 80))
 
         if fav_entries and normal_entries:
             ctk.CTkFrame(
@@ -4587,36 +4614,48 @@ class MainWindow(ctk.CTk):
     # ──────────────────────────────────────────────
 
     def apply_theme(self, theme_id: str):
+        """Aktualizuje kolory akcentu in-place — bez rebuild, bez flash."""
+        if getattr(self, '_accent_animating', False):
+            return
+        self._accent_animating = True
+        try:
+            self._do_apply_theme()
+        finally:
+            self._accent_animating = False
+
+    def _do_apply_theme(self):
+        """Właściwa przebudowa UI po zmianie koloru akcentu/motywu."""
         global ACCENT, ACCENT_HOVER
         old_accent   = ACCENT
         colors       = self._prefs.get_theme_colors()
         ACCENT       = colors["accent"]
         ACCENT_HOVER = colors["hover"]
 
-        # Przebuduj sidebar i listę haseł z nowymi kolorami
-        # Wymuś pełny rebuild (statyczny + dynamiczny) przy zmianie motywu
-        self._sidebar_scroll       = None
-        self._categories_cache     = None
-        self._category_icons_cache2 = None
-        self._build_sidebar()
-        # Wymuś kolor aktywnej kategorii — _build_sidebar odbudowuje przyciski,
-        # ale ACCENT jest już nowe, więc wystarczy skonfigurować aktywny przycisk.
+        # ── Sidebar — aktualizuj kolory in-place (bez rebuild) ────────
         _is_dark_sb = ctk.get_appearance_mode() == "Dark"
-        _inactive_bg = "#1a1a1a" if _is_dark_sb else "gray85"
-        if self._active_category in self._cat_buttons:
+        _inactive_ind = "#1a1a1a" if _is_dark_sb else "gray85"
+        for c, btn in list(self._cat_buttons.items()):
+            is_active = (c == self._active_category)
             try:
-                self._cat_buttons[self._active_category].configure(
-                    fg_color=(ACCENT, ACCENT),
-                    text_color=("white", "white"),
+                btn.configure(
+                    fg_color=(ACCENT, ACCENT) if is_active else (LIGHT_CARD, "#1a1a1a"),
+                    text_color=("white", "white") if is_active else ("gray20", "gray80"),
                 )
             except tk.TclError:
                 pass
-        for c, ind in self._cat_indicators.items():
+        for c, ind in list(self._cat_indicators.items()):
             try:
-                ind.configure(bg=ACCENT if c == self._active_category else _inactive_bg)
+                ind.configure(bg=ACCENT if c == self._active_category else _inactive_ind)
             except tk.TclError:
                 pass
-        self._load_passwords(self.entry_search.get().strip())
+
+        # ── Lista haseł — aktualizuj akcent in-place (zero rebuild, zero flash) ─
+        for w in self.scroll_frame.winfo_children():
+            if isinstance(w, (PasswordRow, PasswordCard)):
+                try:
+                    w.update_accent(ACCENT, ACCENT_HOVER)
+                except Exception:
+                    pass
 
         # ── Topbar — live update ───────────────────────────────────
         if self._top_frame and self._top_frame.winfo_exists():
@@ -4890,10 +4929,10 @@ class MainWindow(ctk.CTk):
         self._theme_animating = True
 
         is_dark = (new_mode.lower() == "dark")
-        FADE_OUT_STEPS    = 5
-        FADE_OUT_INTERVAL = 12   # ms  → ~60ms fade-out
-        FADE_IN_STEPS     = 8
-        FADE_IN_INTERVAL  = 18   # ms  → ~144ms fade-in
+        FADE_OUT_STEPS    = 10
+        FADE_OUT_INTERVAL = 10   # ms  → ~100ms fade-out (~100fps equivalent)
+        FADE_IN_STEPS     = 16
+        FADE_IN_INTERVAL  = 14   # ms  → ~224ms fade-in
         MIN_ALPHA         = 0.10
 
         def _do_fade_out(step: int):

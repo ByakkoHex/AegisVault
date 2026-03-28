@@ -698,12 +698,12 @@ def get_scheduler(root) -> AnimationScheduler:
 
 # ── crossfade_list ─────────────────────────────────────────────────────
 
-def crossfade_list(scroll_frame, callback, delay_ms: int = 50):
+def crossfade_list(scroll_frame, callback, delay_ms: int = 30):
     """Overlay na scroll_frame: ukrywa stary content → callback (rebuild) → overlay znika.
 
     Tworzy tk.Canvas overlay dopasowany kolorem do tła scroll_frame,
     po `delay_ms` ms wywołuje callback (który przebudowuje listę z slide_in_row),
-    a następnie natychmiast usuwa overlay — slide_in_row tworzy efekt reveal.
+    a następnie usuwa overlay z małym opóźnieniem — slide_in_row tworzy efekt reveal.
     """
     is_dark = ctk.get_appearance_mode() == "Dark"
     bg = "#252525" if is_dark else "#f0f0f0"
@@ -720,8 +720,19 @@ def crossfade_list(scroll_frame, callback, delay_ms: int = 50):
             callback()
         except Exception:
             pass
+        # Wymuś renderowanie nowych widgetów przed usunięciem overlay
         try:
-            overlay.destroy()
+            scroll_frame.update_idletasks()
+        except tk.TclError:
+            pass
+        # Zniszcz overlay po 80ms — daje slide_in_row czas na start pierwszych wierszy
+        def _destroy_overlay():
+            try:
+                overlay.destroy()
+            except tk.TclError:
+                pass
+        try:
+            scroll_frame.after(80, _destroy_overlay)
         except tk.TclError:
             pass
 
