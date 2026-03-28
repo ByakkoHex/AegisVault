@@ -1,12 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
-# aegisvault.spec — PyInstaller build config (Windows)
+# aegisvault.spec — PyInstaller build config (cross-platform)
 #
-# Budowanie (z katalogu projektu):
-#   pip install pyinstaller
-#   pyinstaller aegisvault.spec --noconfirm
-#
-# Następnie instalator (wymaga Inno Setup 6):
-#   iscc /DAppVersion=1.0.0 installer\windows\aegisvault.iss
+# Windows  → dist/AegisVault/        (katalog, pakowany przez Inno Setup)
+# macOS    → dist/AegisVault.app     (bundle, pakowany przez build_dmg.sh)
+# Linux    → dist/aegisvault         (single-file exe, pakowany przez build_deb.sh)
 
 import sys
 import os
@@ -45,8 +42,12 @@ tc_datas,  _,            _          = _safe_collect("tkcalendar")
 
 added_files += kr_datas + pt_datas + tc_datas
 
-# winrt — zbierz submoduły (te pakiety są .pyd, nie zwykłe foldery)
-winrt_hidden = collect_submodules("winrt") if __import__("importlib.util").util.find_spec("winrt") else []
+# winrt — Windows only
+winrt_hidden = []
+if sys.platform == "win32":
+    import importlib.util as _ilu
+    if _ilu.find_spec("winrt"):
+        winrt_hidden = collect_submodules("winrt")
 
 # ── Hidden imports ────────────────────────────────────────────────────────────
 hidden = [
@@ -83,17 +84,23 @@ hidden = [
     "pystray",
     # Keyring
     "keyring",
-    # WinRT (Windows Hello)
-    "winrt",
-    # Stdlib których PyInstaller czasem nie zbiera automatycznie
+    # Stdlib
     "email.mime.text",
     "email.mime.multipart",
     "ctypes",
-    "ctypes.wintypes",
 ] + winrt_hidden + kr_hidden + pt_hidden
 
-# ── Ikona — obsłuż brak pliku ─────────────────────────────────────────────────
-icon_path = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
+# Windows-only imports
+if sys.platform == "win32":
+    hidden += ["winrt", "ctypes.wintypes"]
+
+# ── Ikona ─────────────────────────────────────────────────────────────────────
+if sys.platform == "darwin":
+    icon_path = "assets/icon.icns" if os.path.exists("assets/icon.icns") else None
+elif sys.platform == "win32":
+    icon_path = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
+else:
+    icon_path = None
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 a = Analysis(
@@ -119,37 +126,88 @@ a = Analysis(
         "telnetlib",
         "antigravity",
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# ── Windows build ─────────────────────────────────────────────────────────────
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name="AegisVault",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=False,          # brak czarnego okna konsoli
-    icon=icon_path,
-    version_file=None,
-)
+# ── Linux — single-file exe ───────────────────────────────────────────────────
+if sys.platform == "linux":
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        name="aegisvault",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=True,
+        upx=True,
+        console=False,
+        icon=icon_path,
+    )
 
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=["vcruntime140.dll", "python*.dll"],
-    name="AegisVault",
-)
+# ── macOS — .app bundle ───────────────────────────────────────────────────────
+elif sys.platform == "darwin":
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="AegisVault",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        console=False,
+        icon=icon_path,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=False,
+        name="AegisVault",
+    )
+    app = BUNDLE(
+        coll,
+        name="AegisVault.app",
+        icon=icon_path,
+        bundle_identifier="pl.aegisvault.AegisVault",
+        info_plist={
+            "CFBundleShortVersionString": "1.2.0",
+            "CFBundleVersion": "1.2.0",
+            "NSHighResolutionCapable": True,
+        },
+    )
+
+# ── Windows — katalog (pakowany Inno Setup) ───────────────────────────────────
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="AegisVault",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=False,
+        icon=icon_path,
+        version_file=None,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=["vcruntime140.dll", "python*.dll"],
+        name="AegisVault",
+    )

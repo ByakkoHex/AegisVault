@@ -37,6 +37,10 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install system deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install python-tk@3.11 || true
+
       - name: Install system deps (Linux)
         if: runner.os == 'Linux'
         run: |
