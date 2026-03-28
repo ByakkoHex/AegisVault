@@ -152,6 +152,7 @@ DEFAULT_CATEGORY_COLORS = {k: v["color"] for k, v in CATEGORIES.items() if v["co
 class PasswordFormWindow(ctk.CTkToplevel):
     def __init__(self, parent, db, crypto, user, entry=None):
         super().__init__(parent)
+        self.withdraw()
         self.db     = db
         self.crypto = crypto
         self.user   = user
@@ -166,7 +167,6 @@ class PasswordFormWindow(ctk.CTkToplevel):
         self.grab_set()
         self.focus()
         self._build_ui()
-        self.after(10, lambda: slide_fade_in(self))
 
         if entry:
             self.entry_title.insert(0, entry.title or "")
@@ -178,6 +178,8 @@ class PasswordFormWindow(ctk.CTkToplevel):
                 self.category_var.set(entry.category)
             if entry.expires_at:
                 self.entry_expires.insert(0, entry.expires_at.strftime("%Y-%m-%d"))
+
+        self.after(20, self._reveal)
 
     def _build_ui(self):
         apply_hex_to_window(self)
@@ -464,6 +466,25 @@ class PasswordFormWindow(ctk.CTkToplevel):
                         accent=ACCENT, accent_hover=ACCENT_HOVER,
                         on_created=_on_created)
 
+    def _reveal(self):
+        self.deiconify()
+        # Simple alpha fade-in: 6 steps × 12ms
+        def _fade(step=0, steps=6):
+            if not self.winfo_exists():
+                return
+            try:
+                self.wm_attributes("-alpha", (step + 1) / steps)
+            except tk.TclError:
+                pass
+            if step + 1 < steps:
+                self.after(12, lambda: _fade(step + 1, steps))
+            else:
+                try:
+                    self.wm_attributes("-alpha", 1.0)
+                except tk.TclError:
+                    pass
+        _fade()
+
     def _field(self, parent, label, placeholder, secret, attr):
         ctk.CTkLabel(parent, text=label, anchor="w", font=ctk.CTkFont(size=12)).pack(
             padx=16, pady=(12, 2), fill="x"
@@ -631,6 +652,7 @@ class _CategoryDialog(ctk.CTkToplevel):
     def __init__(self, parent, db, user, accent: str, accent_hover: str,
                  on_created=None):
         super().__init__(parent)
+        self.withdraw()
         self.db           = db
         self.user         = user
         self.accent       = accent
@@ -657,7 +679,26 @@ class _CategoryDialog(ctk.CTkToplevel):
         self.grab_set()
         self._build_ui()
         self.after(250, self._focus_entry)
-        self.after(10, lambda: slide_fade_in(self, slide_px=10, duration_ms=130))
+        self.after(20, self._reveal)
+
+    def _reveal(self):
+        self.deiconify()
+        # Simple alpha fade-in: 6 steps × 12ms
+        def _fade(step=0, steps=6):
+            if not self.winfo_exists():
+                return
+            try:
+                self.wm_attributes("-alpha", (step + 1) / steps)
+            except tk.TclError:
+                pass
+            if step + 1 < steps:
+                self.after(12, lambda: _fade(step + 1, steps))
+            else:
+                try:
+                    self.wm_attributes("-alpha", 1.0)
+                except tk.TclError:
+                    pass
+        _fade()
 
     def _focus_entry(self):
         if hasattr(self, "_entry"):
@@ -852,6 +893,7 @@ class _CategoryDialog(ctk.CTkToplevel):
 class TrashWindow(ctk.CTkToplevel):
     def __init__(self, parent, db, crypto, user, on_refresh):
         super().__init__(parent)
+        self.withdraw()
         self.db         = db
         self.crypto     = crypto
         self.user       = user
@@ -863,7 +905,7 @@ class TrashWindow(ctk.CTkToplevel):
         self.grab_set()
         self.focus()
         self._build_ui()
-        self.after(10, lambda: slide_fade_in(self))
+        self.after(20, self._reveal)
 
     def _build_ui(self):
         apply_hex_to_window(self)
@@ -909,6 +951,25 @@ class TrashWindow(ctk.CTkToplevel):
         self.scroll.pack(fill="both", expand=True, padx=20, pady=(0, 16))
         apply_hex_to_canvas(self.scroll._parent_canvas, hex_size=36, glow_max=2, glow_interval_ms=1800)
         self._load()
+
+    def _reveal(self):
+        self.deiconify()
+        # Simple alpha fade-in: 6 steps × 12ms
+        def _fade(step=0, steps=6):
+            if not self.winfo_exists():
+                return
+            try:
+                self.wm_attributes("-alpha", (step + 1) / steps)
+            except tk.TclError:
+                pass
+            if step + 1 < steps:
+                self.after(12, lambda: _fade(step + 1, steps))
+            else:
+                try:
+                    self.wm_attributes("-alpha", 1.0)
+                except tk.TclError:
+                    pass
+        _fade()
 
     def _load(self):
         for w in self.scroll.winfo_children():
@@ -2341,6 +2402,7 @@ class PasswordRow(ctk.CTkFrame):
 class MainWindow(ctk.CTk):
     def __init__(self, db, crypto, user):
         super().__init__()
+        self.withdraw()          # hide immediately — revealed via _fade_in_on_start()
         self.db     = db
         self.crypto = crypto
         self.user   = user
@@ -2449,6 +2511,29 @@ class MainWindow(ctk.CTk):
         self.bind_all("<Button-1>", self._reset_activity)
         self.bind_all("<Key>",      self._reset_activity)
         self.protocol("WM_DELETE_WINDOW", self._on_window_close)
+
+        # Reveal with a smooth fade-in (hides blank-screen flash on startup)
+        self._fade_in_on_start()
+
+    # ──────────────────────────────────────────────
+    # FADE-IN ON START
+    # ──────────────────────────────────────────────
+
+    def _fade_in_on_start(self):
+        """Reveal the window with a 200 ms alpha fade-in (8 steps × 15 ms)."""
+        STEPS = 8
+        DELAY = 15  # ms between steps
+        self.attributes("-alpha", 0.0)
+        self.deiconify()
+
+        def _step(i: int):
+            if i > STEPS:
+                self.attributes("-alpha", 1.0)
+                return
+            self.attributes("-alpha", i / STEPS)
+            self.after(DELAY, _step, i + 1)
+
+        self.after(DELAY, _step, 1)
 
     # ──────────────────────────────────────────────
     # TRAY

@@ -65,6 +65,13 @@ def main():
 
     # 2. Jeśli zalogowano — otwórz główne okno
     if login.logged_user and login.crypto:
+        # Hide the (already-destroyed) login window to close any lingering frame
+        # before the main window builds; guard in case it was already destroyed.
+        try:
+            login.withdraw()
+        except Exception:
+            pass
+
         app = MainWindow(login.db, login.crypto, login.logged_user)
         app.report_callback_exception = _suppress_stale_after_errors
         if os.path.exists(_icon):

@@ -410,6 +410,7 @@ class HexBackground(tk.Canvas):
         self._hex_centers: dict[int, tuple]        = {}   # iid → (cx, cy)
         self._glowing:     dict[int, int]          = {}   # iid → steps_total
         self._sched_id:    int | None              = None
+        self._resize_job:  int | None              = None
         self._last_size:   tuple                   = (-1, -1)
         # Opcjonalne: canvas viewportu (CTkScrollableFrame._parent_canvas).
         # Gdy ustawiony, glow jest losowany tylko spośród widocznych hexów.
@@ -433,7 +434,13 @@ class HexBackground(tk.Canvas):
         if new == self._last_size or new[0] <= 1:
             return
         self._last_size = new
-        self.after_idle(self._rebuild)
+        if self._resize_job is not None:
+            self.after_cancel(self._resize_job)
+        self._resize_job = self.after(80, self._do_resize)
+
+    def _do_resize(self) -> None:
+        self._resize_job = None
+        self._rebuild()
 
     def _rebuild(self) -> None:
         try:
