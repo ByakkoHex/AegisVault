@@ -3132,8 +3132,10 @@ class MainWindow(ctk.CTk):
         )
         self._top_separator.pack(fill="x")
         self._top_separator.start_animation()
+        # Upewnij się że bg separatora jest adaptive (light/dark) — zapobiega czarnemu paskowi
+        self._top_separator.configure(bg=_gbg())
 
-        body = ctk.CTkFrame(self, fg_color="transparent")
+        body = ctk.CTkFrame(self, fg_color=(LIGHT_BG, DARK_BG))
         body.pack(fill="both", expand=True)
 
         # Sidebar
@@ -3860,6 +3862,20 @@ class MainWindow(ctk.CTk):
         self._category_colors_cache = colors
         return colors
 
+    def _search_local(self, query: str, entries: list) -> list:
+        """Filtruje listę wpisów lokalnie używając rapidfuzz (jeśli dostępny) albo prostego contains."""
+        if not query:
+            return entries
+        try:
+            from rapidfuzz import process, fuzz
+            titles = [e.title for e in entries]
+            results = process.extract(query, titles, scorer=fuzz.partial_ratio, score_cutoff=55, limit=200)
+            matched = {title for title, score, _ in results}
+            return [e for e in entries if e.title in matched]
+        except ImportError:
+            q = query.lower()
+            return [e for e in entries if q in (e.title or "").lower() or q in (e.url or "").lower()]
+
     def _load_passwords(self, query="", animate=True):
         # Chowamy stare wiersze zamiast natychmiast niszczyć — eliminuje flash pustej listy.
         # Nowe widgety budujemy w tym samym przebiegu, stare niszczymy w kolejnej iteracji.
@@ -3881,7 +3897,9 @@ class MainWindow(ctk.CTk):
         self.after(0, _cleanup_old)
 
         if query:
-            entries = self.db.search_passwords(self.user, query, self._active_category)
+            # Wczytaj wszystkie wpisy z aktywnej kategorii, potem filtruj lokalnie przez rapidfuzz
+            all_entries = self.db.get_passwords_by_category(self.user, self._active_category)
+            entries = self._search_local(query, all_entries)
         else:
             entries = self.db.get_passwords_by_category(self.user, self._active_category)
 
@@ -4621,10 +4639,16 @@ class MainWindow(ctk.CTk):
 
         if self._top_separator and self._top_separator.winfo_exists():
             self._top_separator.update_accent(ACCENT, _gbg())
+            self._top_separator.configure(bg=_gbg())
 
         if self._content_grad and self._content_grad.winfo_exists():
             self._content_grad.update_accent(ACCENT, _gcard())
             self._content_grad.configure(bg=_gcard())
+
+        if self._sidebar_grad_top and self._sidebar_grad_top.winfo_exists():
+            self._sidebar_grad_top.update_accent(ACCENT, _gbg())
+        if self._sidebar_grad_bot and self._sidebar_grad_bot.winfo_exists():
+            self._sidebar_grad_bot.update_accent(ACCENT, _gbg())
 
         if self._sec_bar_canvas and self._sec_bar_canvas.winfo_exists():
             self._sec_bar_canvas.configure(bg=_gcard())

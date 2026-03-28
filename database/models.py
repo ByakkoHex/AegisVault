@@ -11,7 +11,7 @@ Tabele:
 from datetime import datetime
 from sqlalchemy import (
     create_engine, Column, Integer, String,
-    LargeBinary, ForeignKey, DateTime, Text, Index
+    LargeBinary, ForeignKey, DateTime, Text, Index, event
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -113,7 +113,21 @@ class CustomCategory(Base):
 
 
 def init_db(db_path: str = "password_manager.db") -> object:
-    engine = create_engine(f"sqlite:///{db_path}", echo=False)
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        echo=False,
+        connect_args={"check_same_thread": False},
+    )
+
+    @event.listens_for(engine, "connect")
+    def _set_pragmas(dbapi_conn, _):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=-32000")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
     Base.metadata.create_all(engine)
 
     # Migracje dla istniejących baz danych

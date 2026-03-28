@@ -6,7 +6,6 @@ i porównuje z lokalną wersją aplikacji.
 """
 
 import sys
-import httpx
 from typing import Optional
 from version import APP_VERSION
 
@@ -48,6 +47,7 @@ def check_for_update() -> Optional[dict]:
         dict z polami: version, download_url, changelog
         jeśli dostępna jest nowsza wersja, None w przeciwnym razie.
     """
+    import httpx  # lazy — ładuj tylko przy faktycznym wywołaniu
     try:
         resp = httpx.get(
             GITHUB_API_URL,

@@ -485,6 +485,7 @@ class SettingsWindow(ctk.CTkToplevel):
                                 base=_gbg_s(),
                             )
                         self._switch_tab(self._current_tab)
+                        self._update_hex_accents(color)
                 except ValueError:
                     self._hex_entry.configure(border_color="#e05252")
             elif len(val) == 0:
@@ -837,6 +838,9 @@ class SettingsWindow(ctk.CTkToplevel):
         # Odśwież kolor aktywnej zakładki
         self._switch_tab(self._current_tab)
 
+        # ── Aktualizuj hex tło okna ustawień ──────────────────────────
+        self._update_hex_accents(_new_accent)
+
         if self.on_theme_change:
             self.on_theme_change(theme_id)
 
@@ -848,6 +852,35 @@ class SettingsWindow(ctk.CTkToplevel):
             self._hex_entry.insert(0, _ha[1:])
             self._hex_preview.configure(fg_color=_ha)
             self._hex_entry.configure(border_color=("gray70", "gray30"))
+
+    def _update_hex_accents(self, new_accent: str) -> None:
+        """Aktualizuje kolor akcentu hex tła we wszystkich warstwach okna ustawień."""
+        # Warstwa okna (HexBackground z apply_hex_to_window)
+        hbg = getattr(self, '_window_hex_bg', None)
+        if hbg is not None:
+            try:
+                if hbg.winfo_exists() and hasattr(hbg, 'update_accent'):
+                    hbg.update_accent(new_accent)
+            except Exception:
+                pass
+        # Warstwy scrollable w zakładkach (CTkScrollableFrame._parent_canvas)
+        for tab_frame in getattr(self, '_tab_frames', {}).values():
+            try:
+                for child in tab_frame.winfo_children():
+                    # CTkScrollableFrame pakuje HexBackground wewnątrz i _parent_canvas
+                    sc = child  # CTkScrollableFrame
+                    if hasattr(sc, '_parent_canvas'):
+                        pc = sc._parent_canvas
+                        if hasattr(pc, '_hex_update_accent'):
+                            pc._hex_update_accent(new_accent)
+                    for sub in child.winfo_children():
+                        if hasattr(sub, 'update_accent'):
+                            try:
+                                sub.update_accent(new_accent)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
 
     def _toggle_theme(self):
         if self.theme_switch_var.get() == "on":

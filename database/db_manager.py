@@ -5,6 +5,7 @@ db_manager.py - Operacje na bazie danych dla Password Managera
 import json
 import base64
 from datetime import datetime, timedelta
+from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 from database.models import User, Password, PasswordHistory, CustomCategory, init_db, DEFAULT_CATEGORIES
 from core.crypto import (
@@ -161,12 +162,15 @@ class DatabaseManager:
         self.session.add(hist)
 
         # Usuń nadmiarowe (najstarsze) wpisy historii
-        all_hist = (self.session.query(PasswordHistory)
-                    .filter_by(password_id=entry.id)
-                    .order_by(PasswordHistory.changed_at.desc())
-                    .all())
-        for old in all_hist[HISTORY_LIMIT:]:
-            self.session.delete(old)
+        count = self.session.query(func.count(PasswordHistory.id)).filter_by(password_id=entry.id).scalar()
+        if count >= HISTORY_LIMIT:
+            oldest = (self.session.query(PasswordHistory.id)
+                      .filter_by(password_id=entry.id)
+                      .order_by(PasswordHistory.changed_at.asc())
+                      .limit(count - HISTORY_LIMIT + 1)
+                      .all())
+            for (old_id,) in oldest:
+                self.session.query(PasswordHistory).filter_by(id=old_id).delete()
 
     def get_history(self, entry: Password) -> list[PasswordHistory]:
         return (self.session.query(PasswordHistory)

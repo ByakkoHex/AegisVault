@@ -19,6 +19,7 @@ import tkinter as tk
 import customtkinter as ctk
 import math
 import random
+import functools
 
 from utils.prefs_manager import PrefsManager
 
@@ -55,6 +56,7 @@ _FIRE_GLOW_PCT   = 0.09       # 9% — wyraźne
 # Helpers
 # ══════════════════════════════════════════════════════════════════════
 
+@functools.lru_cache(maxsize=512)
 def _lerp_hex(c1: str, c2: str, t: float) -> str:
     t = max(0.0, min(1.0, t))
     r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
@@ -90,14 +92,15 @@ def _calc_glow_max(hex_count: int, base: int, mode: str) -> int:
     return max(base, min(base * 8, dynamic))
 
 
-def _hex_pts(cx: float, cy: float, size: float) -> list:
+@functools.lru_cache(maxsize=512)
+def _hex_pts(cx: float, cy: float, size: float) -> tuple:
     """Wierzchołki flat-top hexagonu."""
     pts = []
     for i in range(6):
         a = math.radians(60 * i)
         pts.append(cx + size * math.cos(a))
         pts.append(cy + size * math.sin(a))
-    return pts
+    return tuple(pts)
 
 
 def _get_accent() -> str:
@@ -131,6 +134,11 @@ def apply_hex_to_canvas(
     hidden_grid=True — siatka niewidoczna (outline=tło), tylko glow widoczny.
     """
     TAG   = "_hex"
+    # Ensure canvas has no highlight border that could bleed through other widgets.
+    try:
+        canvas.configure(highlightthickness=0)
+    except Exception:
+        pass
     state = {
         "hex_ids":  [],
         "centers":  {},          # iid → (cx, cy)
@@ -197,7 +205,7 @@ def apply_hex_to_canvas(
             return
         state["last_wh"] = (w, h)
 
-        draw_h = max(h * 6, 8000)
+        draw_h = h + hex_size * 4
         canvas.delete(TAG)
         state["hex_ids"].clear()
         state["centers"].clear()
@@ -321,9 +329,29 @@ def apply_hex_to_canvas(
         state["last_wh"] = (-1, -1)
         canvas.after_idle(_draw)
 
+    def _stop_animation():
+        state["active"] = False
+        if state["sched_id"] is not None:
+            try:
+                canvas.after_cancel(state["sched_id"])
+            except Exception:
+                pass
+
+    def _update_accent(new_accent: str) -> None:
+        """Wymusza przerysowanie siatki z nowym akcentem z PrefsManager."""
+        if not _alive():
+            return
+        # Resetuj last_wh — _draw odczyta świeży kolor z _hex_base_col() / _get_accent()
+        state["last_wh"] = (-1, -1)
+        canvas.after_idle(_draw)
+
+    # Przypisz update_accent do canvas jako atrybut dla zewnętrznych wywołań.
+    canvas._hex_update_accent = _update_accent
+
     # ── Podpięcie ─────────────────────────────────────────────────────
     canvas.bind("<Configure>", lambda e: _draw(), add="+")
     canvas.bind("<Destroy>",   _on_destroy, add="+")
+    canvas.bind("<Destroy>",   lambda e: _stop_animation(), add="+")
     canvas.after(120, _draw)
     canvas.after(120 + _next_interval(), _schedule_glow)
     canvas.after(300, _bind_inner_frame)
@@ -390,6 +418,7 @@ class HexBackground(tk.Canvas):
         self._card_regions: list  = []     # [(y_top_excl, y_bot_excl), ...] — regiony kart do wykluczenia z glow
 
         self.bind("<Configure>", self._on_configure)
+        self.bind("<Destroy>", lambda e: self.stop_animation(), add="+")
 
         # Rejestracja w CTk AppearanceModeTracker — automatyczny rebuild przy zmianie motywu
         try:
@@ -570,6 +599,22 @@ class HexBackground(tk.Canvas):
         except Exception:
             pass
 
+    def update_accent(self, new_accent: str | None = None) -> None:
+        """
+        Aktualizuje kolor outline hexagonów na żywo po zmianie akcentu.
+        new_accent — nowy kolor akcentu (str hex, np. '#4F8EF7').
+                     Gdy None, odczytuje z PrefsManager.
+        Nie wymaga pełnego rebuild — szybka aktualizacja itemconfig.
+        """
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        # Wymuś pełny rebuild żeby od razu odświeżyć grid z nowym akcentem
+        self._last_size = (-1, -1)
+        self._rebuild()
+
     def update_theme(self) -> None:
         """
         Wymusza odświeżenie kolorów tła i siatki zgodnie z aktualnym trybem
@@ -584,16 +629,20 @@ class HexBackground(tk.Canvas):
         self._last_size = (-1, -1)
         self._rebuild()
 
-    def destroy(self) -> None:
+    def stop_animation(self) -> None:
+        """Zatrzymuje animację glow. Bezpieczne do wywołania w <Destroy>."""
         self._animate = False
-        self._glowing.clear()
-        self._hex_centers.clear()
         if self._sched_id is not None:
             try:
                 self.after_cancel(self._sched_id)
             except Exception:
                 pass
-        self._sched_id = None
+            self._sched_id = None
+
+    def destroy(self) -> None:
+        self.stop_animation()
+        self._glowing.clear()
+        self._hex_centers.clear()
         try:
             ctk.AppearanceModeTracker.remove(self._on_appearance_change)
         except Exception:
@@ -786,7 +835,7 @@ def apply_hex_to_scrollable(
         glow_mode=glow_mode,
         bg_color=bg_color,
     )
-    hex_bg.place(x=0, y=0, relwidth=1.0, height=8000)
+    hex_bg.place(x=0, y=0, relwidth=1.0, relheight=1.0)
     try:
         hex_bg.lower()
     except Exception:
