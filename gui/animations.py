@@ -130,15 +130,56 @@ def slide_fade_in(toplevel, slide_px: int = 14, duration_ms: int = DURATION_SHOR
     Okno startuje z alpha=0 i przesunięciem -slide_px w osi Y,
     potem płynnie przesuwa się na właściwą pozycję i staje się widoczne.
     Jeśli -alpha niedostępne (VM/RDP), wykonuje tylko slide bez fade.
+
+    Jeśli okno jest poza ekranem, automatycznie wyśrodkowuje je względem rodzica przed animacją.
     """
+    # Deiconify jeśli okno jest ukryte (withdraw pattern).
+    # Okno startuje już na +5000+5000 (z konstruktora), więc deiconify flash
+    # alpha=1.0 (Windows reset) jest off-screen — niewidoczny dla użytkownika.
+    try:
+        state = toplevel.wm_state()
+        if state == "withdrawn":
+            toplevel.deiconify()
+    except tk.TclError:
+        pass
+    # alpha=0 natychmiast po deiconify (deiconify resetuje alpha na Windows)
+    try:
+        toplevel.wm_attributes("-alpha", 0.0)
+    except tk.TclError:
+        pass
     try:
         toplevel.update_idletasks()
         tx = toplevel.winfo_x()
         ty = toplevel.winfo_y()
         tw = toplevel.winfo_width()
         th = toplevel.winfo_height()
+        # Na Windows po deiconify() update_idletasks() może nie przetworzyć WM_SIZE,
+        # przez co winfo_width/height zwraca 1. Fallback: parsuj geometry string.
+        if tw <= 1 or th <= 1:
+            import re as _re
+            _m = _re.match(r"(\d+)x(\d+)", toplevel.geometry())
+            if _m:
+                tw, th = int(_m.group(1)), int(_m.group(2))
     except tk.TclError:
         return
+
+    # Jeśli okno wylądowało poza ekranem (np. _CategoryDialog/TrashWindow z geometry +5000+5000),
+    # wyśrodkuj je względem rodzica lub środka ekranu zanim uruchomisz animację.
+    _OFF_SCREEN_THRESHOLD = 1500
+    if tx > _OFF_SCREEN_THRESHOLD or ty > _OFF_SCREEN_THRESHOLD or tx < -_OFF_SCREEN_THRESHOLD or ty < -_OFF_SCREEN_THRESHOLD:
+        try:
+            parent = toplevel.master
+            if parent and parent.winfo_exists():
+                px = parent.winfo_rootx() + parent.winfo_width()  // 2
+                py = parent.winfo_rooty() + parent.winfo_height() // 2
+            else:
+                px = toplevel.winfo_screenwidth()  // 2
+                py = toplevel.winfo_screenheight() // 2
+            tx = px - tw // 2
+            ty = py - th // 2
+        except tk.TclError:
+            pass
+        toplevel.geometry(f"{tw}x{th}+{tx}+{ty}")
 
     step_ms = max(1, duration_ms // steps)
     alpha_supported = True

@@ -57,6 +57,8 @@ class SettingsWindow(ctk.CTkToplevel):
     def __init__(self, parent, db: DatabaseManager, crypto: CryptoManager,
                  user, on_logout=None, on_theme_change=None):
         super().__init__(parent)
+        self.geometry("+5000+5000")          # off-screen: CTk auto-deiconify flash niewidoczny
+        self.wm_attributes("-alpha", 0.0)   # alpha=0 na starcie; slide_fade_in ujawni okno
         self.db              = db
         self.crypto          = crypto
         self.user            = user
@@ -77,7 +79,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._safe_destroy)
 
         self._build_ui()
-        self.after(10, lambda: slide_fade_in(self, slide_px=10, duration_ms=130))
+        self.after(20, lambda: slide_fade_in(self, slide_px=4, duration_ms=60, steps=12))
 
     def _safe_destroy(self):
         try:

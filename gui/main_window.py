@@ -13,6 +13,7 @@ Funkcje:
 - HIBP sprawdzanie wycieków
 """
 
+import sys
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog
@@ -152,7 +153,8 @@ DEFAULT_CATEGORY_COLORS = {k: v["color"] for k, v in CATEGORIES.items() if v["co
 class PasswordFormWindow(ctk.CTkToplevel):
     def __init__(self, parent, db, crypto, user, entry=None):
         super().__init__(parent)
-        self.withdraw()
+        self.geometry("+5000+5000")   # off-screen: CTk auto-deiconify flash niewidoczny
+        self.wm_attributes("-alpha", 0.0)
         self.db     = db
         self.crypto = crypto
         self.user   = user
@@ -467,9 +469,34 @@ class PasswordFormWindow(ctk.CTkToplevel):
                         on_created=_on_created)
 
     def _reveal(self):
+        # Oblicz docelową pozycję (centrum rodzica)
+        cx, cy = None, None
+        try:
+            par = self.master
+            if par and par.winfo_exists():
+                pw, ph = par.winfo_width(), par.winfo_height()
+                px, py = par.winfo_rootx(), par.winfo_rooty()
+                ww = self.winfo_reqwidth() or 460
+                wh = self.winfo_reqheight() or 720
+                cx = px + (pw - ww) // 2
+                cy = py + (ph - wh) // 2
+        except tk.TclError:
+            pass
+        # Okno startuje na +5000+5000 — deiconify flash alpha=1.0 jest off-screen
         self.deiconify()
-        # Simple alpha fade-in: 6 steps × 12ms
-        def _fade(step=0, steps=6):
+        # alpha=0 natychmiast po deiconify (Windows resetuje alpha przy show)
+        try:
+            self.wm_attributes("-alpha", 0.0)
+        except tk.TclError:
+            pass
+        # Przesuń na właściwą pozycję przy alpha=0 (ruch jest niewidoczny)
+        if cx is not None:
+            try:
+                self.geometry(f"+{cx}+{cy}")
+            except tk.TclError:
+                pass
+        self.update_idletasks()
+        def _fade(step=0, steps=5):
             if not self.winfo_exists():
                 return
             try:
@@ -477,7 +504,7 @@ class PasswordFormWindow(ctk.CTkToplevel):
             except tk.TclError:
                 pass
             if step + 1 < steps:
-                self.after(12, lambda: _fade(step + 1, steps))
+                self.after(6, lambda: _fade(step + 1, steps))
             else:
                 try:
                     self.wm_attributes("-alpha", 1.0)
@@ -652,7 +679,8 @@ class _CategoryDialog(ctk.CTkToplevel):
     def __init__(self, parent, db, user, accent: str, accent_hover: str,
                  on_created=None):
         super().__init__(parent)
-        self.withdraw()
+        self.geometry("+5000+5000")   # off-screen: CTk auto-deiconify flash niewidoczny
+        self.wm_attributes("-alpha", 0.0)
         self.db           = db
         self.user         = user
         self.accent       = accent
@@ -682,9 +710,31 @@ class _CategoryDialog(ctk.CTkToplevel):
         self.after(20, self._reveal)
 
     def _reveal(self):
+        cx, cy = None, None
+        try:
+            par = self.master
+            if par and par.winfo_exists():
+                pw, ph = par.winfo_width(), par.winfo_height()
+                px, py = par.winfo_rootx(), par.winfo_rooty()
+                ww = self.winfo_reqwidth() or 430
+                wh = self.winfo_reqheight() or 530
+                cx = px + (pw - ww) // 2
+                cy = py + (ph - wh) // 2
+        except tk.TclError:
+            pass
+        # Okno startuje na +5000+5000 — deiconify flash alpha=1.0 jest off-screen
         self.deiconify()
-        # Simple alpha fade-in: 6 steps × 12ms
-        def _fade(step=0, steps=6):
+        try:
+            self.wm_attributes("-alpha", 0.0)
+        except tk.TclError:
+            pass
+        if cx is not None:
+            try:
+                self.geometry(f"+{cx}+{cy}")
+            except tk.TclError:
+                pass
+        self.update_idletasks()
+        def _fade(step=0, steps=5):
             if not self.winfo_exists():
                 return
             try:
@@ -692,7 +742,7 @@ class _CategoryDialog(ctk.CTkToplevel):
             except tk.TclError:
                 pass
             if step + 1 < steps:
-                self.after(12, lambda: _fade(step + 1, steps))
+                self.after(6, lambda: _fade(step + 1, steps))
             else:
                 try:
                     self.wm_attributes("-alpha", 1.0)
@@ -893,7 +943,8 @@ class _CategoryDialog(ctk.CTkToplevel):
 class TrashWindow(ctk.CTkToplevel):
     def __init__(self, parent, db, crypto, user, on_refresh):
         super().__init__(parent)
-        self.withdraw()
+        self.geometry("+5000+5000")   # off-screen: CTk auto-deiconify flash niewidoczny
+        self.wm_attributes("-alpha", 0.0)
         self.db         = db
         self.crypto     = crypto
         self.user       = user
@@ -953,9 +1004,31 @@ class TrashWindow(ctk.CTkToplevel):
         self._load()
 
     def _reveal(self):
+        cx, cy = None, None
+        try:
+            par = self.master
+            if par and par.winfo_exists():
+                pw, ph = par.winfo_width(), par.winfo_height()
+                px, py = par.winfo_rootx(), par.winfo_rooty()
+                ww = self.winfo_reqwidth() or 580
+                wh = self.winfo_reqheight() or 500
+                cx = px + (pw - ww) // 2
+                cy = py + (ph - wh) // 2
+        except tk.TclError:
+            pass
+        # Okno startuje na +5000+5000 — deiconify flash alpha=1.0 jest off-screen
         self.deiconify()
-        # Simple alpha fade-in: 6 steps × 12ms
-        def _fade(step=0, steps=6):
+        try:
+            self.wm_attributes("-alpha", 0.0)
+        except tk.TclError:
+            pass
+        if cx is not None:
+            try:
+                self.geometry(f"+{cx}+{cy}")
+            except tk.TclError:
+                pass
+        self.update_idletasks()
+        def _fade(step=0, steps=5):
             if not self.winfo_exists():
                 return
             try:
@@ -963,7 +1036,7 @@ class TrashWindow(ctk.CTkToplevel):
             except tk.TclError:
                 pass
             if step + 1 < steps:
-                self.after(12, lambda: _fade(step + 1, steps))
+                self.after(6, lambda: _fade(step + 1, steps))
             else:
                 try:
                     self.wm_attributes("-alpha", 1.0)
@@ -2402,7 +2475,8 @@ class PasswordRow(ctk.CTkFrame):
 class MainWindow(ctk.CTk):
     def __init__(self, db, crypto, user):
         super().__init__()
-        self.withdraw()          # hide immediately — revealed via _fade_in_on_start()
+        self.geometry("+10000+10000")    # natychmiast poza ekran — flash przy tworzeniu okna jest off-screen
+        self.attributes("-alpha", 0.0)   # invisible during build — revealed via _fade_in_on_start()
         self.db     = db
         self.crypto = crypto
         self.user   = user
@@ -2512,6 +2586,9 @@ class MainWindow(ctk.CTk):
         self.bind_all("<Key>",      self._reset_activity)
         self.protocol("WM_DELETE_WINDOW", self._on_window_close)
 
+        # Wyrenderuj UI niewidocznie (alpha=0.0) zanim zacznie się fade-in
+        self.update_idletasks()
+
         # Reveal with a smooth fade-in (hides blank-screen flash on startup)
         self._fade_in_on_start()
 
@@ -2520,11 +2597,12 @@ class MainWindow(ctk.CTk):
     # ──────────────────────────────────────────────
 
     def _fade_in_on_start(self):
-        """Reveal the window with a 200 ms alpha fade-in (8 steps × 15 ms)."""
+        """Reveal the window with a smooth fade-in.
+        Delay 120 ms zapewnia że okno logowania zdąży zanikać przed pojawieniem się tego okna.
+        """
         STEPS = 8
         DELAY = 15  # ms between steps
-        self.attributes("-alpha", 0.0)
-        self.deiconify()
+        START_DELAY = 120  # ms — czekaj na zanik okna logowania
 
         def _step(i: int):
             if i > STEPS:
@@ -2533,7 +2611,18 @@ class MainWindow(ctk.CTk):
             self.attributes("-alpha", i / STEPS)
             self.after(DELAY, _step, i + 1)
 
-        self.after(DELAY, _step, 1)
+        def _start():
+            # Okno jest przy alpha=0 na +-10000 — przesuń na środek ekranu zanim
+            # zacznie się fade-in (ruch jest niewidoczny przy alpha=0).
+            try:
+                sw = self.winfo_screenwidth()
+                sh = self.winfo_screenheight()
+                self.geometry(f"960x660+{max(0,(sw-960)//2)}+{max(0,(sh-660)//2)}")
+            except Exception:
+                self.geometry("960x660")
+            _step(1)
+
+        self.after(START_DELAY, _start)
 
     # ──────────────────────────────────────────────
     # TRAY
@@ -5525,7 +5614,15 @@ class MainWindow(ctk.CTk):
                     pass
         except Exception:
             pass
-        self.destroy()
+        try:
+            self.quit()
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        sys.exit(0)
 
     def on_close(self):
         self._cleanup()

@@ -688,7 +688,18 @@ class LoginWindow(ctk.CTk):
         _prefs.set("last_username", user.username)
         self.logged_user = user
         self.crypto = CryptoManager(master_password, user.salt)
-        self.destroy()
+        self._fade_out_destroy()
+
+    def _fade_out_destroy(self, step: int = 0, steps: int = 6):
+        """Płynne zanikanie okna logowania przed zniszczeniem — ukrywa flash przejścia."""
+        try:
+            self.attributes("-alpha", 1.0 - (step + 1) / steps)
+        except Exception:
+            pass
+        if step + 1 < steps:
+            self.after(14, lambda: self._fade_out_destroy(step + 1, steps))
+        else:
+            self.destroy()
 
     def _on_register(self):
         username = self.entry_username.get().strip()

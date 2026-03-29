@@ -18,6 +18,8 @@ class ChangelogDialog(ctk.CTkToplevel):
 
     def __init__(self, parent, version: str, changelog: str, accent: str = ACCENT):
         super().__init__(parent)
+        self.geometry("+5000+5000")          # off-screen: CTk auto-deiconify flash niewidoczny
+        self.wm_attributes("-alpha", 0.0)   # alpha=0 na starcie; slide_fade_in ujawni okno
         self._version   = version
         self._changelog = changelog
         self._accent    = accent
@@ -29,12 +31,12 @@ class ChangelogDialog(ctk.CTkToplevel):
         self.lift()
         self.focus_force()
 
-        self.update_idletasks()
-        px = parent.winfo_x() + (parent.winfo_width()  - 500) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 460) // 2
-        self.geometry(f"500x460+{px}+{py}")
+        # Nie nadpisuj pozycji +5000+5000 — slide_fade_in wyśrodkuje okno off-screen.
+        self.geometry("500x460")
 
         self._build()
+        from gui.animations import slide_fade_in
+        self.after(20, lambda: slide_fade_in(self, slide_px=4, duration_ms=60, steps=12))
 
     def _build(self):
         # ── Nagłówek ──────────────────────────────────────────────

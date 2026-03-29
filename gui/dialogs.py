@@ -36,6 +36,8 @@ class _BaseDialog(ctk.CTkToplevel):
 
     def __init__(self, parent, title: str, message: str, kind: str = "info"):
         super().__init__(parent)
+        self.geometry("+5000+5000")          # off-screen: CTk auto-deiconify flash niewidoczny
+        self.wm_attributes("-alpha", 0.0)   # alpha=0 na starcie; slide_fade_in ujawni okno
         self.result = None
 
         self.title(title)
@@ -53,17 +55,12 @@ class _BaseDialog(ctk.CTkToplevel):
         self.bind("<Escape>", lambda e: self._on_close())
 
         # Animacja otwarcia
-        self.after(10, lambda: slide_fade_in(self, slide_px=12, duration_ms=140))
+        self.after(20, lambda: slide_fade_in(self, slide_px=4, duration_ms=60, steps=12))
 
     def _center(self, parent):
-        self.update_idletasks()
-        if parent and parent.winfo_exists():
-            px = parent.winfo_rootx() + parent.winfo_width() // 2
-            py = parent.winfo_rooty() + parent.winfo_height() // 2
-        else:
-            px, py = 640, 400
-        w, h = 420, 240
-        self.geometry(f"{w}x{h}+{px - w//2}+{py - h//2}")
+        # Ustaw tylko rozmiar — pozycja (+5000+5000 z konstruktora) celowo zostaje off-screen,
+        # żeby deiconify flash (alpha=1.0 reset) był niewidoczny. Centrowanie robi slide_fade_in.
+        self.geometry("420x240")
 
     def _build(self, title: str, message: str, kind: str):
         icon   = ICONS.get(kind, "ℹ")

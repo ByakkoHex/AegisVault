@@ -35,6 +35,8 @@ def _gcard_sync() -> str:
 class SyncWindow(ctk.CTkToplevel):
     def __init__(self, parent, db, crypto, user, sync_client: SyncClient, on_refresh=None):
         super().__init__(parent)
+        self.geometry("+5000+5000")          # off-screen: CTk auto-deiconify flash niewidoczny
+        self.wm_attributes("-alpha", 0.0)   # alpha=0 na starcie; slide_fade_in ujawni okno
         self.db = db
         self.crypto = crypto
         self.user = user
@@ -50,7 +52,7 @@ class SyncWindow(ctk.CTkToplevel):
 
         self._build_ui()
         self._check_status()
-        self.after(10, lambda: slide_fade_in(self))
+        self.after(20, lambda: slide_fade_in(self, slide_px=4, duration_ms=60, steps=12))
 
     def _build_ui(self):
         apply_hex_to_window(self)
