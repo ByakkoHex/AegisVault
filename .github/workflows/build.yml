@@ -37,6 +37,14 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Free disk space (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew cleanup --prune=all || true
+          rm -rf ~/Library/Caches/Homebrew || true
+          sudo rm -rf /Library/Developer/CommandLineTools || true
+          df -h
+
       - name: Install system deps (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -55,6 +63,22 @@ jobs:
 
       - name: Build with PyInstaller
         run: pyinstaller aegisvault.spec --noconfirm
+
+      - name: Strip unused Qt frameworks (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          FW="dist/AegisVault.app/Contents/Frameworks"
+          for name in QtNfc QtBluetooth QtWebEngine QtWebEngineCore QtWebEngineWidgets \
+                      QtMultimedia QtMultimediaWidgets QtLocation QtPositioning QtSensors \
+                      QtSerialPort QtSerialBus QtCharts QtDataVisualization \
+                      Qt3DCore Qt3DRender Qt3DInput Qt3DLogic Qt3DAnimation Qt3DExtras \
+                      QtVirtualKeyboard QtQuick QtQuickWidgets QtQml \
+                      QtPdf QtPdfWidgets QtRemoteObjects QtScxml QtStateMachine \
+                      QtNetworkAuth QtSql QtTest QtXml QtDBus; do
+            fw_path="${FW}/${name}.framework"
+            [ -d "$fw_path" ] && echo "Removing ${name}" && rm -rf "$fw_path" || true
+          done
+          echo "App size after strip: $(du -sh dist/AegisVault.app | cut -f1)"
 
       - name: Ad-hoc code sign (macOS)
         if: runner.os == 'macOS'

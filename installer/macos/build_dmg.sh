@@ -85,13 +85,16 @@ if command -v create-dmg &>/dev/null; then
         "${STAGING_DIR}"
 else
     echo "[1/2] Budowanie tymczasowego DMG (hdiutil)..."
+    STAGING_MB=$(du -sm "${STAGING_DIR}" | cut -f1)
+    DMG_SIZE="$((STAGING_MB + 80))m"
+    echo "    Rozmiar staging: ${STAGING_MB} MB → DMG: ${DMG_SIZE}"
     hdiutil create \
         -srcfolder "${STAGING_DIR}" \
         -volname "${VOLUME_NAME}" \
         -fs HFS+ \
         -fsargs "-c c=64,a=16,b=16" \
         -format UDRW \
-        -size 300m \
+        -size "${DMG_SIZE}" \
         "${TEMP_DMG}"
 
     echo "[2/2] Kompresja do finalnego DMG..."
