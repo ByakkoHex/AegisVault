@@ -7,6 +7,7 @@ Widoki zarządzane przez QStackedWidget:
   2 — 2FA (TOTP + Push Approve sub-stack)
   3 — setup 2FA (QR kod)
   4 — welcome / import
+  5 — reset masterhasła (3 kroki: użytkownik → TOTP → nowe hasło)
 
 Sygnały Qt zapewniają thread-safe komunikację z wątkami (WH, Push).
 Po udanym logowaniu: self.logged_user + self.crypto ustawione, window zamknięte.
@@ -28,7 +29,7 @@ from PyQt6.QtCore  import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui   import QPixmap, QIcon, QFont, QImage
 
 from database.db_manager import DatabaseManager
-from core.crypto  import CryptoManager
+from core.crypto  import CryptoManager, KDF_PBKDF2
 from core.totp    import TOTPManager
 from utils.password_strength import check_strength, _build_checklist
 from utils.push_auth  import PushAuthClient
@@ -195,9 +196,11 @@ class LoginWindow(QMainWindow):
         self._page_2fa      = self._build_2fa_page(dark)
         self._page_setup2fa = self._build_setup2fa_page(dark)
         self._page_welcome  = self._build_welcome_page(dark)
+        self._page_reset    = self._build_reset_page(dark)
 
         for page in [self._page_login, self._page_register,
-                     self._page_2fa, self._page_setup2fa, self._page_welcome]:
+                     self._page_2fa, self._page_setup2fa, self._page_welcome,
+                     self._page_reset]:
             self._stack.addWidget(page)
 
     def resizeEvent(self, event):
@@ -234,6 +237,16 @@ class LoginWindow(QMainWindow):
 
         layout.addSpacing(8)
         self._btn_login = self._make_btn(layout, "Zaloguj się", self._on_login, primary=True)
+
+        forgot_btn = QPushButton("Nie pamiętam hasła")
+        forgot_btn.setFixedHeight(28)
+        forgot_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; "
+            "color: #666; font-size: 12px; text-decoration: underline; }"
+            "QPushButton:hover { color: #aaa; }"
+        )
+        forgot_btn.clicked.connect(self._show_reset)
+        layout.addWidget(forgot_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Windows Hello — tylko Windows
         self._wh_btn = QPushButton("🪟  Windows Hello")
@@ -510,6 +523,162 @@ class LoginWindow(QMainWindow):
         layout.addStretch()
         return page
 
+    # ── Strona: Reset masterhasła ─────────────────────────────────────
+
+    def _build_reset_page(self, dark: bool) -> QWidget:
+        page = QWidget()
+        page.setStyleSheet("background: transparent;")
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Wewnętrzny stos: krok1 | krok2 | krok3
+        self._reset_stack = QStackedWidget()
+        self._reset_stack.setStyleSheet("background: transparent;")
+        outer.addWidget(self._reset_stack)
+
+        # ── Krok 1: nazwa użytkownika ──────────────────────────────────
+        step1 = QWidget()
+        step1.setStyleSheet("background: transparent;")
+        s1l = QVBoxLayout(step1)
+        s1l.setSpacing(4)
+
+        h = QLabel("Resetuj hasło masterowe")
+        h.setStyleSheet("font-size: 15px; font-weight: bold; margin-bottom: 4px;")
+        s1l.addWidget(h)
+
+        desc = QLabel("Podaj nazwę użytkownika.\nReset wymaga aktywnego 2FA (kod z aplikacji authenticator).")
+        desc.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        desc.setWordWrap(True)
+        desc.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 8px;")
+        s1l.addWidget(desc)
+
+        self._reset_user_e = self._make_field(s1l, "Nazwa użytkownika", "Wpisz login...", secret=False)
+        self._reset_user_e.returnPressed.connect(self._on_reset_step1)
+        self._reset_step1_err = QLabel("")
+        self._reset_step1_err.setStyleSheet("color: #e53e3e; font-size: 11px;")
+        self._reset_step1_err.setVisible(False)
+        s1l.addWidget(self._reset_step1_err)
+        s1l.addSpacing(8)
+        self._make_btn(s1l, "Dalej →", self._on_reset_step1, primary=True)
+        back1 = QPushButton("← Wróć do logowania")
+        back1.setFixedHeight(36)
+        back1.setStyleSheet(
+            "QPushButton { background: transparent; border: none; "
+            "color: #666; font-size: 12px; }"
+            "QPushButton:hover { color: #aaa; }"
+        )
+        back1.clicked.connect(self._show_login)
+        s1l.addWidget(back1, alignment=Qt.AlignmentFlag.AlignCenter)
+        s1l.addStretch()
+
+        # ── Krok 2: weryfikacja TOTP ───────────────────────────────────
+        step2 = QWidget()
+        step2.setStyleSheet("background: transparent;")
+        s2l = QVBoxLayout(step2)
+        s2l.setSpacing(4)
+
+        h2 = QLabel("Weryfikacja 2FA")
+        h2.setStyleSheet("font-size: 15px; font-weight: bold; margin-bottom: 4px;")
+        s2l.addWidget(h2)
+
+        self._reset_totp_desc = QLabel("Podaj aktualny 6-cyfrowy kod\nz aplikacji authenticator.")
+        self._reset_totp_desc.setWordWrap(True)
+        self._reset_totp_desc.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 8px;")
+        s2l.addWidget(self._reset_totp_desc)
+
+        self._reset_totp_e = QLineEdit()
+        self._reset_totp_e.setPlaceholderText("000000")
+        self._reset_totp_e.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._reset_totp_e.setFixedHeight(48)
+        self._reset_totp_e.setMaxLength(6)
+        self._reset_totp_e.setStyleSheet(
+            "font-size: 22px; border-radius: 8px; letter-spacing: 8px;"
+            "background: #252525; color: white; border: 1px solid #333;"
+        )
+        self._reset_totp_e.returnPressed.connect(self._on_reset_step2)
+        s2l.addWidget(self._reset_totp_e)
+
+        self._reset_step2_err = QLabel("")
+        self._reset_step2_err.setStyleSheet("color: #e53e3e; font-size: 11px;")
+        self._reset_step2_err.setVisible(False)
+        s2l.addWidget(self._reset_step2_err)
+        s2l.addSpacing(8)
+        self._make_btn(s2l, "Zweryfikuj →", self._on_reset_step2, primary=True)
+        back2 = QPushButton("← Wróć")
+        back2.setFixedHeight(36)
+        back2.setStyleSheet(
+            "QPushButton { background: transparent; border: none; "
+            "color: #666; font-size: 12px; }"
+            "QPushButton:hover { color: #aaa; }"
+        )
+        back2.clicked.connect(lambda: self._reset_stack.setCurrentIndex(0))
+        s2l.addWidget(back2, alignment=Qt.AlignmentFlag.AlignCenter)
+        s2l.addStretch()
+
+        # ── Krok 3: nowe hasło ─────────────────────────────────────────
+        step3 = QWidget()
+        step3.setStyleSheet("background: transparent;")
+        s3l = QVBoxLayout(step3)
+        s3l.setSpacing(4)
+
+        h3 = QLabel("Nowe hasło masterowe")
+        h3.setStyleSheet("font-size: 15px; font-weight: bold; margin-bottom: 4px;")
+        s3l.addWidget(h3)
+
+        desc3 = QLabel("Tożsamość potwierdzona.\nUstaw nowe hasło masterowe.")
+        desc3.setWordWrap(True)
+        desc3.setStyleSheet("color: #4caf50; font-size: 12px; margin-bottom: 8px;")
+        s3l.addWidget(desc3)
+
+        self._reset_pwd1_e  = self._make_field(s3l, "Nowe hasło", "Min. 8 znaków...", secret=True)
+        self._reset_pwd2_e  = self._make_field(s3l, "Powtórz hasło", "Powtórz nowe hasło...", secret=True)
+        self._reset_pwd2_e.returnPressed.connect(self._on_reset_step3)
+
+        # Pasek siły
+        self._reset_str_bar = QProgressBar()
+        self._reset_str_bar.setRange(0, 100)
+        self._reset_str_bar.setValue(0)
+        self._reset_str_bar.setFixedHeight(6)
+        self._reset_str_bar.setTextVisible(False)
+        self._reset_str_bar.setStyleSheet(
+            "QProgressBar { background: #3a3a3a; border-radius: 3px; border: none; }"
+            "QProgressBar::chunk { background: #718096; }"
+        )
+        s3l.addWidget(self._reset_str_bar)
+        self._reset_str_lbl = QLabel("")
+        self._reset_str_lbl.setStyleSheet("font-size: 11px; color: #888;")
+        s3l.addWidget(self._reset_str_lbl)
+        self._reset_pwd1_e.textChanged.connect(self._update_reset_strength)
+
+        self._reset_step3_err = QLabel("")
+        self._reset_step3_err.setStyleSheet("color: #e53e3e; font-size: 11px;")
+        self._reset_step3_err.setVisible(False)
+        s3l.addWidget(self._reset_step3_err)
+        s3l.addSpacing(8)
+        self._reset_btn = self._make_btn(s3l, "Zmień hasło i zaloguj", self._on_reset_step3, primary=True)
+        s3l.addStretch()
+
+        for step in (step1, step2, step3):
+            self._reset_stack.addWidget(step)
+
+        return page
+
+    def _update_reset_strength(self, text: str):
+        if not text:
+            self._reset_str_bar.setValue(0)
+            self._reset_str_lbl.setText("")
+            return
+        sc = check_strength(text)
+        color = sc.get("color", "#718096")
+        self._reset_str_bar.setStyleSheet(
+            "QProgressBar { background: #3a3a3a; border-radius: 3px; border: none; }"
+            f"QProgressBar::chunk {{ background: {color}; }}"
+        )
+        self._reset_str_bar.setValue(sc.get("percent", 0))
+        self._reset_str_lbl.setText(sc.get("label", ""))
+        self._reset_str_lbl.setStyleSheet(f"font-size: 11px; color: {color};")
+
     # ── Połączenie sygnałów ───────────────────────────────────────────
 
     def _connect_signals(self):
@@ -557,6 +726,130 @@ class LoginWindow(QMainWindow):
         self._welcome_name_lbl.setText(f"Konto '{user.username}' gotowe!")
         self._subtitle.setText("Witaj w AegisVault!")
         self._stack.setCurrentIndex(4)
+
+    def _show_reset(self):
+        self._reset_user_e.setText(self._login_user.text())
+        self._reset_stack.setCurrentIndex(0)
+        self._reset_step1_err.setVisible(False)
+        self._subtitle.setText("Resetuj hasło masterowe")
+        self._stack.setCurrentIndex(5)
+        QTimer.singleShot(50, self._reset_user_e.setFocus)
+
+    # ── Reset masterhasła — logika kroków ────────────────────────────
+
+    def _on_reset_step1(self):
+        username = self._reset_user_e.text().strip()
+        if not username:
+            self._reset_step1_err.setText("Podaj nazwę użytkownika.")
+            self._reset_step1_err.setVisible(True)
+            return
+        user = self.db.get_user(username)
+        if not user:
+            self._reset_step1_err.setText("Nie znaleziono użytkownika.")
+            self._reset_step1_err.setVisible(True)
+            return
+        if not user.totp_secret:
+            self._reset_step1_err.setText(
+                "Ten konto nie ma włączonego 2FA.\n"
+                "Reset hasła bez 2FA nie jest możliwy.\n"
+                "Skonfiguruj 2FA zanim zapomnisz hasła."
+            )
+            self._reset_step1_err.setVisible(True)
+            return
+        self._reset_pending_user = user
+        self._reset_step1_err.setVisible(False)
+        self._reset_totp_e.clear()
+        self._reset_step2_err.setVisible(False)
+        self._reset_stack.setCurrentIndex(1)
+        QTimer.singleShot(50, self._reset_totp_e.setFocus)
+
+    def _on_reset_step2(self):
+        code = self._reset_totp_e.text().strip()
+        if len(code) != 6 or not code.isdigit():
+            self._reset_step2_err.setText("Kod musi mieć dokładnie 6 cyfr.")
+            self._reset_step2_err.setVisible(True)
+            return
+        user = self._reset_pending_user
+        if not TOTPManager(secret=user.totp_secret).verify(code):
+            self._reset_step2_err.setText("Nieprawidłowy kod 2FA.")
+            self._reset_step2_err.setVisible(True)
+            shake(self._reset_totp_e)
+            self._reset_totp_e.clear()
+            return
+        self._reset_step2_err.setVisible(False)
+        self._reset_pwd1_e.clear()
+        self._reset_pwd2_e.clear()
+        self._reset_step3_err.setVisible(False)
+        self._reset_stack.setCurrentIndex(2)
+        QTimer.singleShot(50, self._reset_pwd1_e.setFocus)
+
+    def _on_reset_step3(self):
+        pwd1 = self._reset_pwd1_e.text()
+        pwd2 = self._reset_pwd2_e.text()
+        if len(pwd1) < 8:
+            self._reset_step3_err.setText("Hasło musi mieć co najmniej 8 znaków.")
+            self._reset_step3_err.setVisible(True)
+            return
+        if pwd1 != pwd2:
+            self._reset_step3_err.setText("Hasła nie są identyczne.")
+            self._reset_step3_err.setVisible(True)
+            shake(self._reset_pwd2_e)
+            return
+        self._reset_btn.setEnabled(False)
+        self._reset_btn.setText("Zmieniam hasło…")
+        user = self._reset_pending_user
+
+        def _do_reset():
+            try:
+                # Musimy zbudować stary CryptoManager — ale nie znamy starego hasła.
+                # Tworzymy "pusty" klucz do re-szyfrowania: odszyfrowanie istniejących
+                # wpisów NIE jest możliwe bez starego hasła — dane zostaną wyczyszczone.
+                from database.models import Password, PasswordHistory
+                from core.crypto import generate_salt, hash_master_password, KDF_ARGON2ID
+
+                new_salt   = generate_salt(32)
+                new_crypto = CryptoManager(pwd1, new_salt, kdf_version=KDF_ARGON2ID)
+
+                # Usuń wszystkie zaszyfrowane hasła i historię
+                # (nie możemy re-szyfrować bez starego klucza)
+                self.db.session.query(PasswordHistory).filter(
+                    PasswordHistory.password_id.in_(
+                        self.db.session.query(Password.id).filter_by(user_id=user.id)
+                    )
+                ).delete(synchronize_session=False)
+                self.db.session.query(Password).filter_by(user_id=user.id).delete()
+
+                user.master_password_hash = hash_master_password(pwd1, version=KDF_ARGON2ID)
+                user.salt                 = new_salt
+                user.kdf_version          = KDF_ARGON2ID
+                self.db.session.commit()
+
+                self.crypto      = new_crypto
+                self.logged_user = user
+                QTimer.singleShot(0, self._after_reset_success)
+            except Exception as e:
+                self.db.session.rollback()
+                QTimer.singleShot(0, lambda: self._after_reset_error(str(e)))
+
+        threading.Thread(target=_do_reset, daemon=True).start()
+
+    def _after_reset_success(self):
+        self._reset_btn.setEnabled(True)
+        self._reset_btn.setText("Zmień hasło i zaloguj")
+        show_success(
+            "Hasło zmienione",
+            "Hasło masterowe zostało zmienione.\n\n"
+            "⚠️ Istniejące hasła zostały usunięte — niemożliwe było\n"
+            "ich re-szyfrowanie bez znajomości starego hasła.",
+            parent=self
+        )
+        self._complete_login(self.logged_user, self._reset_pwd1_e.text())
+
+    def _after_reset_error(self, msg: str):
+        self._reset_btn.setEnabled(True)
+        self._reset_btn.setText("Zmień hasło i zaloguj")
+        self._reset_step3_err.setText(f"Błąd: {msg}")
+        self._reset_step3_err.setVisible(True)
 
     def _switch_2fa(self, mode: str):
         self._push_poll_timer.stop()

@@ -1335,43 +1335,10 @@ class SettingsPanel(QWidget):
             show_error("Błąd 2FA", "Nieprawidłowy kod 2FA!", parent=dialog)
             return
         try:
-            from database.models import Password, PasswordHistory
-            new_salt   = generate_salt(32)
-            new_crypto = CryptoManager(new_pwd, new_salt, kdf_version=KDF_ARGON2ID)
-
-            # Re-szyfruj wszystkie hasła (aktywne + kosz)
-            all_passwords = (self.db.session.query(Password)
-                             .filter_by(user_id=self.user.id).all())
-            for entry in all_passwords:
-                try:
-                    pt = self.crypto.decrypt(entry.encrypted_password)
-                    entry.encrypted_password = new_crypto.encrypt(pt)
-                except Exception:
-                    pass  # uszkodzony wpis — pomiń
-
-            # Re-szyfruj historię haseł
-            history_entries = (
-                self.db.session.query(PasswordHistory)
-                .join(Password)
-                .filter(Password.user_id == self.user.id)
-                .all()
-            )
-            for h in history_entries:
-                try:
-                    pt = self.crypto.decrypt(h.encrypted_password)
-                    h.encrypted_password = new_crypto.encrypt(pt)
-                except Exception:
-                    pass
-
-            self.user.master_password_hash = hash_master_password(new_pwd, version=KDF_ARGON2ID)
-            self.user.salt       = new_salt
-            self.user.kdf_version = KDF_ARGON2ID
-            self.db.session.commit()
-            self.crypto = new_crypto
+            self.crypto = self.db.change_master_password(self.user, self.crypto, new_pwd)
             show_success("Sukces", "Hasło masterowe zostało zmienione.", parent=dialog)
             dialog.accept()
         except Exception as e:
-            self.db.session.rollback()
             show_error("Błąd", f"Wystąpił błąd:\n{e}", parent=dialog)
 
     # ══════════════════════════════════════════════════════════════════

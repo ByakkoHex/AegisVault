@@ -399,5 +399,50 @@ class DatabaseManager:
 
         return imported, skipped
 
+    def change_master_password(self, user: "User", old_crypto: "CryptoManager",
+                               new_password: str) -> "CryptoManager":
+        """
+        Zmienia masterhasło: generuje nową sól, re-szyfruje wszystkie hasła
+        (aktywne + kosz) i całą historię haseł.
+        Zwraca nowy CryptoManager.
+        Rzuca wyjątek i wykonuje rollback przy błędzie.
+        """
+        try:
+            new_salt   = generate_salt(32)
+            new_crypto = CryptoManager(new_password, new_salt, kdf_version=KDF_ARGON2ID)
+
+            # Re-szyfruj hasła (aktywne + kosz)
+            passwords = self.session.query(Password).filter_by(user_id=user.id).all()
+            for p in passwords:
+                try:
+                    p.encrypted_password = new_crypto._fernet.encrypt(
+                        old_crypto.decrypt(p.encrypted_password).encode("utf-8")
+                    )
+                except Exception:
+                    pass  # uszkodzony wpis — pomiń
+
+            # Re-szyfruj historię
+            history = (self.session.query(PasswordHistory)
+                       .join(Password)
+                       .filter(Password.user_id == user.id)
+                       .all())
+            for h in history:
+                try:
+                    h.encrypted_password = new_crypto._fernet.encrypt(
+                        old_crypto.decrypt(h.encrypted_password).encode("utf-8")
+                    )
+                except Exception:
+                    pass
+
+            user.master_password_hash = hash_master_password(new_password, version=KDF_ARGON2ID)
+            user.salt                 = new_salt
+            user.kdf_version          = KDF_ARGON2ID
+            self.session.commit()
+            return new_crypto
+
+        except Exception:
+            self.session.rollback()
+            raise
+
     def close(self):
         self.session.close()
