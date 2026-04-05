@@ -169,7 +169,8 @@ class DatabaseManager:
     # ──────────────────────────────────────────────
 
     def add_password(self, user, crypto, title, username, plaintext_password,
-                     url="", notes="", category="Inne", expires_at=None) -> Password:
+                     url="", notes="", category="Inne", expires_at=None,
+                     otp_secret=None) -> Password:
         entry = Password(
             user_id=user.id,
             title=title,
@@ -179,6 +180,7 @@ class DatabaseManager:
             notes=notes,
             category=category,
             expires_at=expires_at,
+            otp_secret=otp_secret or None,
         )
         self.session.add(entry)
         self.session.commit()
@@ -186,7 +188,7 @@ class DatabaseManager:
 
     def update_password(self, entry, crypto, title=None, username=None,
                         plaintext_password=None, url=None, notes=None,
-                        category=None, expires_at=None) -> Password:
+                        category=None, expires_at=None, otp_secret=None) -> Password:
         # Zapisz historię przed zmianą hasła
         if plaintext_password is not None:
             self._save_history(entry)
@@ -198,6 +200,7 @@ class DatabaseManager:
         if notes is not None:              entry.notes = notes
         if category is not None:           entry.category = category
         if expires_at is not None:         entry.expires_at = expires_at
+        if otp_secret is not None:         entry.otp_secret = otp_secret or None
         entry.updated_at = datetime.now(timezone.utc)
         self.session.commit()
         return entry

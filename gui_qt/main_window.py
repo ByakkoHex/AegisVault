@@ -48,6 +48,7 @@ from utils.prefs_manager import PrefsManager, THEMES
 from utils.sync_client import SyncClient
 from utils import security_score as _sec_score
 from utils.updater import check_for_update
+import pyotp
 import utils.windows_hello as wh
 import utils.autostart as autostart
 from utils.logger import get_logger
@@ -355,6 +356,34 @@ class PasswordFormDialog(QDialog):
         )
         fl.addWidget(self._notes_e)
 
+        # OTP Secret
+        fl.addWidget(_section_label("Klucz OTP (opcjonalnie)"))
+        otp_row = QWidget()
+        otp_row.setStyleSheet("background: transparent;")
+        otprl = QHBoxLayout(otp_row)
+        otprl.setContentsMargins(0, 0, 0, 0)
+        otprl.setSpacing(6)
+        self._otp_e = QLineEdit()
+        self._otp_e.setPlaceholderText("Sekret Base32 lub otpauth://... URI")
+        self._otp_e.setFixedHeight(40)
+        self._otp_e.setStyleSheet(
+            f"background: {bg_input}; color: {text_col}; "
+            f"border: 1.5px solid {bdr}; border-radius: 8px; "
+            "padding: 8px 12px; font-size: 13px;"
+        )
+        otprl.addWidget(self._otp_e)
+        self._otp_preview_lbl = QLabel("")
+        self._otp_preview_lbl.setFixedWidth(68)
+        self._otp_preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._otp_preview_lbl.setStyleSheet(
+            f"background: {'#1a2a1a' if dark else '#d4f0d4'}; "
+            f"color: {'#7ec87e' if dark else '#2a6e2a'}; "
+            "border-radius: 8px; font-size: 14px; font-weight: bold; border: none;"
+        )
+        otprl.addWidget(self._otp_preview_lbl)
+        fl.addWidget(otp_row)
+        self._otp_e.textChanged.connect(self._update_otp_preview)
+
         fl.addStretch()
         scroll.setWidget(inner)
         vl.addWidget(scroll)
@@ -390,6 +419,8 @@ class PasswordFormDialog(QDialog):
                 self._cat_combo.setCurrentIndex(idx)
             if entry.expires_at:
                 self._expires_e.setText(entry.expires_at.strftime("%Y-%m-%d"))
+            if entry.otp_secret:
+                self._otp_e.setText(entry.otp_secret)
 
         # Hex background — drawn behind all widgets
         self._hex = HexBackground(self, hex_size=32, glow_max=2, glow_interval_ms=2000)
@@ -424,6 +455,19 @@ class PasswordFormDialog(QDialog):
         )
         layout.addWidget(e)
         return e
+
+    def _update_otp_preview(self, text):
+        """Pokazuje podgląd kodu TOTP na żywo obok pola OTP."""
+        from utils.import_manager import _parse_otp_secret
+        secret = _parse_otp_secret(text.strip())
+        if not secret:
+            self._otp_preview_lbl.setText("")
+            return
+        try:
+            code = pyotp.TOTP(secret).now()
+            self._otp_preview_lbl.setText(code)
+        except Exception:
+            self._otp_preview_lbl.setText("")
 
     def _toggle_pwd(self):
         if self._pwd_e.echoMode() == QLineEdit.EchoMode.Password:
@@ -510,17 +554,23 @@ class PasswordFormDialog(QDialog):
                 show_error("Błąd daty", f"Nierozpoznany format: '{raw_exp}'\n(użyj RRRR-MM-DD)", parent=self)
                 return
 
+        from utils.import_manager import _parse_otp_secret
+        otp_raw    = self._otp_e.text().strip()
+        otp_secret = _parse_otp_secret(otp_raw) if otp_raw else None
+
         if self.entry:
             self.db.update_password(
                 self.entry, self.crypto,
                 title=title, username=username, plaintext_password=password,
                 url=url, notes=notes, category=category, expires_at=expires,
+                otp_secret=otp_secret,
             )
         else:
             self.db.add_password(
                 self.user, self.crypto,
                 title=title, username=username, plaintext_password=password,
                 url=url, notes=notes, category=category, expires_at=expires,
+                otp_secret=otp_secret,
             )
         self.result = True
         self.accept()
@@ -1015,6 +1065,29 @@ class PasswordRowWidget(QFrame):
         if not compact:
             _action_btn("", "⌨ Auto-type", _bg_green, _fg_green, self._autotype, "Auto-type")
 
+        # ── OTP (tylko gdy wpis ma sekret) ───────────────────────────
+        if getattr(entry, "otp_secret", None):
+            self._otp_btn = QPushButton("🔑 ···")
+            self._otp_btn.setFixedSize(btn_w + 14 if not compact else btn_w, btn_h)
+            _otp_bg = "#1a2a3a" if self._dark else "#d4eaff"
+            _otp_fg = "#7ab8f5" if self._dark else "#1a4a80"
+            self._otp_btn.setStyleSheet(
+                f"QPushButton {{"
+                f"  background: {_otp_bg}; color: {_otp_fg};"
+                f"  border: none; border-radius: 6px;"
+                f"  font-size: {'11px' if compact else '12px'}; font-weight: bold;"
+                f"  padding: 0 {'4px' if compact else '8px'}; min-height: 0; min-width: 0;"
+                f"}}"
+            )
+            self._otp_btn.setToolTip("Kopiuj kod OTP (TOTP)")
+            self._otp_btn.clicked.connect(self._copy_otp)
+            brl.addWidget(self._otp_btn)
+            # Live OTP timer
+            self._otp_timer = QTimer(self)
+            self._otp_timer.timeout.connect(self._refresh_otp_btn)
+            self._otp_timer.start(1000)
+            self._refresh_otp_btn()
+
         # ── Edytuj ───────────────────────────────────────────────────
         _bg_edit = "#2a2a2a" if self._dark else "#e8e8e8"
         _fg_edit = "#cccccc" if self._dark else "#444444"
@@ -1025,6 +1098,27 @@ class PasswordRowWidget(QFrame):
                     "#ff7070" if self._dark else "#c0392b", self._trash, "Przenieś do kosza")
 
         rl.addWidget(btns)
+
+    def _refresh_otp_btn(self):
+        """Aktualizuje przycisk OTP — kod + pozostałe sekundy."""
+        try:
+            secret = self.entry.otp_secret
+            totp   = pyotp.TOTP(secret)
+            code   = totp.now()
+            secs   = 30 - int(time.time()) % 30
+            self._otp_btn.setText(f"🔑 {code[:3]} {code[3:]}  {secs}s" if not self.compact
+                                  else f"🔑 {secs}s")
+        except Exception:
+            pass
+
+    def _copy_otp(self):
+        try:
+            code = pyotp.TOTP(self.entry.otp_secret).now()
+            pyperclip.copy(code)
+            if self.on_copy:
+                self.on_copy(f"{self.entry.title} (OTP)")
+        except Exception:
+            pass
 
     def _copy(self):
         try:

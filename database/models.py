@@ -55,6 +55,7 @@ class Password(Base):
     deleted_at         = Column(DateTime, nullable=True)       # kiedy przeniesiono do kosza
     is_favorite        = Column(Integer, default=0)            # 0=normalne, 1=ulubione
     last_used_at       = Column(DateTime, nullable=True)       # kiedy ostatnio skopiowano
+    otp_secret         = Column(String(256), nullable=True)    # Base32 sekret TOTP (opcjonalny)
     created_at         = Column(DateTime, default=datetime.utcnow)
     updated_at         = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -148,6 +149,10 @@ def init_db(db_path: str = "password_manager.db") -> object:
         for col, sql in migrations.items():
             if col not in pw_cols:
                 conn.execute(text(sql))
+
+        # Migracja passwords.otp_secret (TOTP w wpisach)
+        if "otp_secret" not in pw_cols:
+            conn.execute(text("ALTER TABLE passwords ADD COLUMN otp_secret VARCHAR(256)"))
 
         # Migracja users.kdf_version (Argon2id)
         user_cols = [c["name"] for c in inspector.get_columns("users")]

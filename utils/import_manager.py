@@ -11,10 +11,29 @@ Obsługiwane formaty:
 import csv
 import json
 import io
+import re
 from typing import List, Dict
+from urllib.parse import urlparse, parse_qs, unquote
 
 
-PasswordItem = Dict[str, str]   # title, username, password, url, notes, category
+PasswordItem = Dict[str, str]   # title, username, password, url, notes, category, otp_secret
+
+
+def _parse_otp_secret(otp_field: str) -> str:
+    """Wyciąga Base32 sekret z pola OTPAuth (URI lub czysty sekret)."""
+    if not otp_field:
+        return ""
+    otp_field = otp_field.strip()
+    if otp_field.startswith("otpauth://"):
+        try:
+            parsed = urlparse(otp_field)
+            secret = parse_qs(parsed.query).get("secret", [""])[0]
+            return secret.upper().strip()
+        except Exception:
+            return ""
+    # Czysty Base32
+    clean = re.sub(r"[^A-Z2-7=]", "", otp_field.upper())
+    return clean
 
 
 # ──────────────────────────────────────────────
@@ -86,13 +105,15 @@ def _from_1password(content: str) -> List[PasswordItem]:
         title = row.get("Title") or row.get("title") or ""
         if not title:
             continue
+        otp = _parse_otp_secret(row.get("OTPAuth") or row.get("otpauth") or "")
         items.append({
-            "title":    title.strip(),
-            "username": (row.get("Username") or row.get("username") or "").strip(),
-            "password": (row.get("Password") or row.get("password") or "").strip(),
-            "url":      (row.get("Website") or row.get("website") or row.get("URL") or "").strip(),
-            "notes":    (row.get("Notes") or row.get("notes") or "").strip(),
-            "category": "Inne",
+            "title":      title.strip(),
+            "username":   (row.get("Username") or row.get("username") or "").strip(),
+            "password":   (row.get("Password") or row.get("password") or "").strip(),
+            "url":        (row.get("Website") or row.get("website") or row.get("URL") or "").strip(),
+            "notes":      (row.get("Notes") or row.get("notes") or "").strip(),
+            "category":   "Inne",
+            "otp_secret": otp,
         })
     return items
 
