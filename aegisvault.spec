@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# aegisvault.spec — PyInstaller build config (cross-platform)
+# aegisvault.spec — PyInstaller build config (cross-platform, PyQt6)
 #
 # Windows  → dist/AegisVault/        (katalog, pakowany przez Inno Setup)
 # macOS    → dist/AegisVault.app     (bundle, pakowany przez build_dmg.sh)
@@ -16,31 +16,17 @@ added_files = [
     ("assets", "assets"),
 ]
 
-# customtkinter — znajdź katalog pakietu przez site-packages (bez importu)
-import site
-_ctk_path = None
-for _sp in site.getsitepackages() + [site.getusersitepackages()]:
-    _candidate = os.path.join(_sp, "customtkinter")
-    if os.path.isdir(_candidate):
-        _ctk_path = _candidate
-        break
-if _ctk_path:
-    added_files += [(_ctk_path, "customtkinter")]
-else:
-    print("WARNING: customtkinter package directory not found in site-packages!")
-
-# Zbierz pliki pozostałych pakietów (ignoruj błędy jeśli nie zainstalowane)
+# Zbierz pliki pakietów (ignoruj błędy jeśli nie zainstalowane)
 def _safe_collect(pkg):
     try:
         return collect_all(pkg)
     except Exception:
         return [], [], []
 
-kr_datas,  kr_binaries,  kr_hidden  = _safe_collect("keyring")
-pt_datas,  pt_binaries,  pt_hidden  = _safe_collect("pystray")
-tc_datas,  _,            _          = _safe_collect("tkcalendar")
+kr_datas, kr_binaries, kr_hidden = _safe_collect("keyring")
+qt_datas, qt_binaries, qt_hidden = _safe_collect("PyQt6")
 
-added_files += kr_datas + pt_datas + tc_datas
+added_files += kr_datas + qt_datas
 
 # winrt — Windows only
 winrt_hidden = []
@@ -52,11 +38,13 @@ if sys.platform == "win32":
 # ── Hidden imports ────────────────────────────────────────────────────────────
 hidden = [
     # GUI
-    "customtkinter",
-    "PIL._tkinter_finder",
+    "PyQt6",
+    "PyQt6.QtWidgets",
+    "PyQt6.QtCore",
+    "PyQt6.QtGui",
+    "PyQt6.sip",
     "PIL.Image",
-    "PIL.ImageTk",
-    "tkcalendar",
+    "PIL.ImageQt",
     # Krypto
     "cryptography",
     "cryptography.hazmat.primitives.kdf.pbkdf2",
@@ -80,15 +68,13 @@ hidden = [
     "certifi",
     # Schowek / system
     "pyperclip",
-    # Tray
-    "pystray",
     # Keyring
     "keyring",
     # Stdlib
     "email.mime.text",
     "email.mime.multipart",
     "ctypes",
-] + winrt_hidden + kr_hidden + pt_hidden
+] + winrt_hidden + kr_hidden + qt_hidden
 
 # Windows-only imports
 if sys.platform == "win32":
@@ -106,14 +92,17 @@ else:
 a = Analysis(
     ["main.py"],
     pathex=["."],
-    binaries=kr_binaries + pt_binaries,
+    binaries=kr_binaries + qt_binaries,
     datas=added_files,
     hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        "tkinter.test",
+        "tkinter",
+        "customtkinter",
+        "tkcalendar",
+        "pystray",
         "unittest",
         "email.test",
         "test",
@@ -179,8 +168,8 @@ elif sys.platform == "darwin":
         icon=icon_path,
         bundle_identifier="pl.aegisvault.AegisVault",
         info_plist={
-            "CFBundleShortVersionString": "1.2.6",
-            "CFBundleVersion": "1.2.6",
+            "CFBundleShortVersionString": "1.3.0",
+            "CFBundleVersion": "1.3.0",
             "NSHighResolutionCapable": True,
         },
     )

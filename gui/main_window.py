@@ -2539,6 +2539,10 @@ class MainWindow(ctk.CTk):
         self._category_icons_cache2  = None  # cache get_category_icons()
         self._strength_cache: dict   = {}    # (entry_id, updated_at) -> (score, color)
         self._trash_sidebar_btn      = None  # przycisk Kosz w sidebarze
+        self._current_panel          = None  # fullscreen in-app panel (dla show_panel fallback)
+        self._settings_overlay       = None  # tk.Frame overlay — nakrywa CAŁY window (lift() pewne)
+        self._settings_panel         = None  # SettingsPanel wewnątrz overlay
+        self._settings_open          = False # czy settings jest aktualnie otwarte/animowane
 
         # Generator haseł (sidebar) — persystentny stan między rebuild
         self._gen_pwd     = ""
@@ -2591,6 +2595,11 @@ class MainWindow(ctk.CTk):
 
         # Reveal with a smooth fade-in (hides blank-screen flash on startup)
         self._fade_in_on_start()
+
+        # Pre-create panelu ustawień w tle — 1.5s po starcie, gdy użytkownik
+        # ogląda już listę haseł. Overlay jest poniżej z-order więc tworzenie
+        # widgetów jest niewidoczne; nie blokuje startu aplikacji.
+        self.after(1500, self._precreate_settings_panel)
 
     # ──────────────────────────────────────────────
     # FADE-IN ON START
@@ -4695,7 +4704,7 @@ class MainWindow(ctk.CTk):
             border_width=1, border_color=("gray80", "#2e2e2e")
         )
         self._dashboard_frame.pack(fill="both", expand=True, padx=16, pady=(0, 16))
-        apply_hex_to_scrollable(self._dashboard_frame, hex_size=36, glow_max=6, glow_interval_ms=1200, glow_mode="fire")
+        self._dashboard_hex_bg = apply_hex_to_scrollable(self._dashboard_frame, hex_size=36, glow_max=6, glow_interval_ms=1200, glow_mode="fire")
 
         all_entries = self.db.get_all_passwords(self.user)
         expiring    = self.db.get_expiring_passwords(self.user)
@@ -4977,6 +4986,11 @@ class MainWindow(ctk.CTk):
         if self._top_separator and self._top_separator.winfo_exists():
             self._top_separator.update_accent(ACCENT, _gbg())
             self._top_separator.configure(bg=_gbg())
+        if self._settings_overlay and self._settings_overlay.winfo_exists():
+            try:
+                self._settings_overlay.configure(bg=_gbg())
+            except Exception:
+                pass
 
         if self._content_grad and self._content_grad.winfo_exists():
             self._content_grad.update_accent(ACCENT, _gcard())
@@ -5035,16 +5049,23 @@ class MainWindow(ctk.CTk):
             except Exception:
                 pass
 
+        # Wymuś pełną aktualizację wszystkich CTK widgetów do aktualnego trybu.
+        # update_callbacks() jest bezpieczne — każdy callback (CTKFrame._draw,
+        # HexBackground._on_appearance_change) jest idempotentny.
+        try:
+            ctk.AppearanceModeTracker.update_callbacks()
+        except Exception:
+            pass
+
         # Odśwież hex backgrounds — wymusza aktualizację bg i kolorów siatki
-        # (CTkAppearanceModeTracker obsługuje zmianę trybu automatycznie,
-        # ale jawne wywołanie gwarantuje poprawność przy każdej zmianie motywu)
-        _hbg = getattr(self, '_scroll_hex_bg', None)
-        if _hbg and hasattr(_hbg, 'update_theme'):
-            try:
-                if _hbg.winfo_exists():
-                    _hbg.update_theme()
-            except Exception:
-                pass
+        for _hbg_attr in ('_scroll_hex_bg', '_dashboard_hex_bg'):
+            _hbg = getattr(self, _hbg_attr, None)
+            if _hbg and hasattr(_hbg, 'update_theme'):
+                try:
+                    if _hbg.winfo_exists():
+                        _hbg.update_theme()
+                except Exception:
+                    pass
 
     # ──────────────────────────────────────────────
     # BANNER WYGASAJĄCYCH HASEŁ
@@ -5297,13 +5318,20 @@ class MainWindow(ctk.CTk):
             self._sidebar_grad_bot.update_accent(ACCENT, _gbg())
         if self._score_ring and self._score_ring.winfo_exists():
             self._score_ring.set_bg(_tint if _is_dark else LIGHT_CARD, _is_dark)
-        _hbg = getattr(self, '_scroll_hex_bg', None)
-        if _hbg and hasattr(_hbg, 'update_theme'):
-            try:
-                if _hbg.winfo_exists():
-                    _hbg.update_theme()
-            except Exception:
-                pass
+        for _hbg_attr in ('_scroll_hex_bg', '_dashboard_hex_bg'):
+            _hbg = getattr(self, _hbg_attr, None)
+            if _hbg and hasattr(_hbg, 'update_theme'):
+                try:
+                    if _hbg.winfo_exists():
+                        _hbg.update_theme()
+                except Exception:
+                    pass
+
+        # Wymuś aktualizację wszystkich CTK widgetów (sidebar, body itp.)
+        try:
+            ctk.AppearanceModeTracker.update_callbacks()
+        except Exception:
+            pass
 
         # Sidebar — indicator canvas (tk.Canvas nie obsługuje tuple CTK)
         _inactive_ind = "#1a1a1a" if _is_dark else "gray85"
@@ -5548,18 +5576,207 @@ class MainWindow(ctk.CTk):
         self._user_menu_visible = False
 
     # ──────────────────────────────────────────────
+    # IN-APP PANEL SYSTEM
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _toggle_panel_animations(panel, start: bool) -> None:
+        """Rekurencyjnie startuje lub zatrzymuje animowane widgety wewnątrz panelu."""
+        stack = []
+        try:
+            stack = list(panel.winfo_children())
+        except Exception:
+            return
+        while stack:
+            w = stack.pop()
+            if hasattr(w, 'stop_animation') and hasattr(w, 'start_animation'):
+                try:
+                    if start:
+                        w.start_animation()
+                    else:
+                        w.stop_animation()
+                except Exception:
+                    pass
+            try:
+                stack.extend(w.winfo_children())
+            except Exception:
+                pass
+
+    def _precreate_settings_panel(self):
+        """Tworzy overlay (tk.Frame) + SettingsPanel raz przy starcie.
+
+        Architektura:
+          overlay (tk.Frame) — stale place(relx=0, relwidth=1, relheight=1),
+            warstwowo lift()/lower() żeby przykryć lub odkryć główny UI.
+            tk.Frame.lift() jest niezawodny (brak canvas CTk).
+          panel (SettingsPanel) — wewnątrz overlay, slideuje od relx=1.0→0.0
+            gdy overlay jest już widoczny → slide jest przycinany do granic okna,
+            main content niewidoczny przez cały czas trwania animacji.
+        """
+        if self._settings_overlay and self._settings_overlay.winfo_exists():
+            return
+        try:
+            from gui.settings_window import SettingsPanel
+
+            def _on_close():
+                if self._settings_panel and hasattr(self._settings_panel, 'crypto'):
+                    self.crypto = self._settings_panel.crypto
+                # apply_theme() NIE tutaj — masowe przerysowania main window
+                # podczas gdy overlay zasłania widok powodują blink przy zamknięciu.
+                # Odkładamy na po zakończeniu animacji slide-out (patrz _close_settings_panel).
+                self._close_settings_panel()
+
+            # Overlay stale zakrywa całe okno gdy widoczny (relx=0, relheight=1)
+            # Domyślnie poniżej wszystkiego (lower) — niewidoczny
+            overlay = tk.Frame(self, bg=_gbg())
+            overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+            overlay.lower()
+
+            panel = SettingsPanel(
+                overlay,
+                db=self.db,
+                crypto=self.crypto,
+                user=self.user,
+                on_close=_on_close,
+                on_logout=self._on_account_deleted,
+                on_theme_change=self.apply_theme,
+            )
+            # Panel na prawej krawędzi overlay — gotowy do slide-in
+            panel.place(relx=1.0, rely=0, relwidth=1, relheight=1)
+
+            self._settings_overlay = overlay
+            self._settings_panel   = panel
+            # Animacje tykają w tle od razu — overlay jest lower(), więc koszt CPU ≈ 0
+            # dla użytkownika, ale kanwasy mają zawsze wyrenderowaną zawartość.
+            # Efekt: overlay.lift() przy otwarciu odkrywa już gotowy panel → brak shutter.
+        except Exception:
+            self._settings_overlay = None
+            self._settings_panel   = None
+
+    def show_panel(self, panel_class, **kwargs):
+        """Otwiera non-settings panel z animacją slide-in."""
+        if self._current_panel and self._current_panel.winfo_exists():
+            return
+        self._current_panel = panel_class(self, **kwargs)
+        self._current_panel.place(relx=1.0, rely=0, relwidth=1, relheight=1)
+        self._current_panel.lift()
+        self._toggle_panel_animations(self._current_panel, False)
+
+        def _on_open_done():
+            if self._current_panel:
+                self._toggle_panel_animations(self._current_panel, True)
+
+        self._slide_frame(self._current_panel, 1.0, 0.0, on_done=_on_open_done)
+
+    def close_panel(self):
+        """Zamyka aktywny non-settings panel."""
+        if not self._current_panel or not self._current_panel.winfo_exists():
+            return
+        self._toggle_panel_animations(self._current_panel, False)
+        panel = self._current_panel
+        self._current_panel = None
+
+        def _done():
+            try:
+                if panel.winfo_exists():
+                    panel.destroy()
+            except Exception:
+                pass
+
+        self._slide_frame(panel, 0.0, 1.0, on_done=_done)
+
+    def _slide_frame(self, frame, relx_start, relx_end, duration_ms=200, _t0=None, on_done=None):
+        """Animuje place(relx=...) wybranego CTkFrame od relx_start do relx_end."""
+        if _t0 is None:
+            _t0 = time.perf_counter()
+        elapsed = (time.perf_counter() - _t0) * 1000.0
+        t = min(elapsed / duration_ms, 1.0)
+        eased = _ease_out(t) if relx_end < relx_start else _ease_in(t)
+        relx = relx_start + (relx_end - relx_start) * eased
+        try:
+            frame.place_configure(relx=relx, rely=0, relwidth=1, relheight=1)
+        except Exception:
+            if on_done:
+                on_done()
+            return
+        if t < 1.0:
+            self.after(8, lambda: self._slide_frame(frame, relx_start, relx_end, duration_ms, _t0, on_done))
+        elif on_done:
+            on_done()
+
+    def _close_settings_panel(self):
+        """Slide-out panelu wewnątrz overlay, potem schowanie overlay."""
+        if not self._settings_open:
+            return
+        # Natychmiast — zapobiega podwójnemu otwarciu podczas animacji zamknięcia
+        self._settings_open = False
+
+        overlay = self._settings_overlay
+        panel   = self._settings_panel
+        # NIE zatrzymujemy animacji panelu — overlay je ukrywa; restart przy następnym
+        # otwarciu blikałby. Animacje tykają w tle (znikomy koszt CPU).
+
+        def _done():
+            try:
+                # Resetuj panel na prawy brzeg — gotowy na następne otwarcie
+                if panel and panel.winfo_exists():
+                    panel.place_configure(relx=1.0, rely=0, relwidth=1, relheight=1)
+                # Schowaj overlay pod główny UI
+                if overlay and overlay.winfo_exists():
+                    overlay.lower()
+            except Exception:
+                pass
+            # apply_theme dopiero PO odkryciu main content — żadnych redraws
+            # przez overlay, żadnego blink. Zmiana koloru akcentu widoczna od razu.
+            try:
+                self.apply_theme(self._prefs.get("color_theme"))
+            except Exception:
+                pass
+            # Wymuś natychmiastowe przerysowanie — CTK zaktualizował kolory via
+            # AppearanceModeTracker, ale bez update_idletasks() Tkinter może
+            # odroczyć rendering do następnej interakcji użytkownika.
+            try:
+                self.update_idletasks()
+            except Exception:
+                pass
+
+        if panel and panel.winfo_exists():
+            self._slide_frame(panel, 0.0, 1.0, on_done=_done)
+        else:
+            _done()
+
+    # ──────────────────────────────────────────────
     # NAWIGACJA
     # ──────────────────────────────────────────────
 
     def _open_settings(self):
-        from gui.settings_window import SettingsWindow
-        s = SettingsWindow(self, self.db, self.crypto, self.user,
-                           on_logout=self._on_account_deleted,
-                           on_theme_change=self.apply_theme)
-        self.wait_window(s)
-        self.crypto = s.crypto
-        # Zastosuj motyw po zamknięciu (obsługuje custom kolor hex)
-        self.apply_theme(self._prefs.get("color_theme"))
+        if self._settings_open:
+            return
+        if not self._settings_overlay or not self._settings_overlay.winfo_exists():
+            self._precreate_settings_panel()
+        overlay = self._settings_overlay
+        panel   = self._settings_panel
+        if not overlay:
+            return
+
+        # Odśwież referencje (crypto może się zmienić po zmianie hasła)
+        if panel:
+            panel.crypto = self.crypto
+            panel.user   = self.user
+
+        self._settings_open = True
+
+        # Animacje panelu biegną w tle od precreate — nie trzeba ich startować.
+        # Natychmiast przykryj main content:
+        overlay.lift()
+
+        # Krok 3: slideuj panel — _t0 cofnięty o 16ms żeby pierwszy frame
+        # był już w ruchu (relx ≈ 0.82 zamiast 1.0) i wyrenderował się
+        # w tej samej ramce co overlay.lift() → zero blank-frame blink.
+        if panel:
+            panel.place_configure(relx=1.0, rely=0, relwidth=1, relheight=1)
+        _t0 = time.perf_counter() - 0.016
+        self._slide_frame(panel, 1.0, 0.0, _t0=_t0)
 
     def _open_sync(self):
         from gui.sync_window import SyncWindow
@@ -5599,6 +5816,10 @@ class MainWindow(ctk.CTk):
             self._score_ring.stop_pulse()
         if self._tray:
             self._tray.stop()
+        self._current_panel    = None
+        self._settings_overlay = None
+        self._settings_panel   = None
+        self._settings_open    = False
         try:
             pyperclip.copy("")
         except Exception:

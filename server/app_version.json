@@ -1,5 +1,5 @@
 {
-  "version": "1.2.6",
-  "download_url": "https://example.com/aegisvault-setup.exe",
-  "changelog": "- Płynna zmiana koloru akcentu i motywu (zero flashu)\n- Logo w oknie logowania zmienia kolor z akcentem\n- Domyślny kolor akcentu: kobaltowy niebieski (#0F52BA)\n- Automatyczne sprawdzanie aktualizacji co 4h w tle\n- Toast z powiadomieniem o nowej wersji bez restartu\n- Naprawiono bgerror przy zamknięciu aplikacji\n- Naprawiono kolory generatora haseł przy zmianie akcentu"
+  "version": "1.3.0",
+  "download_url": "https://github.com/ByakkoHex/AegisVault/releases/latest",
+  "changelog": "- Migracja interfejsu na PyQt6 (płynniejsze animacje)\n- Nowy panel ustawień z animacją slide-in\n- Przełącznik motywu słońce/księżyc, zero flashu\n- Naprawiono zmianę tła hexagonalnego przy zmianie motywu\n- 15 kolorów akcentu w siatce 5×3 (52×52 px)\n- Przeprojektowane przyciski wierszy haseł — równe rozmiary\n- Gwiazdka ulubionych zawsze widoczna\n- Naprawiono obcinanie tekstu w przyciskach toggle"
 }

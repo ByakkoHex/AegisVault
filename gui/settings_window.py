@@ -12,8 +12,7 @@ import customtkinter as ctk
 from PIL import Image
 
 from gui.dialogs import show_error, show_info, show_success, ask_yes_no
-from gui.animations import slide_fade_in
-from gui.hex_background import apply_hex_to_scrollable, apply_hex_to_window
+from gui.hex_background import apply_hex_to_scrollable
 from gui.gradient import GradientCanvas, AnimatedGradientCanvas
 from database.db_manager import DatabaseManager
 from core.crypto import (CryptoManager, hash_master_password,
@@ -52,16 +51,16 @@ def _blend_settings_accent(accent: str, base: str, alpha: float) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-class SettingsWindow(ctk.CTkToplevel):
+class SettingsPanel(ctk.CTkFrame):
+    """In-app fullscreen panel ustawień (zastępuje SettingsWindow/CTkToplevel)."""
 
     def __init__(self, parent, db: DatabaseManager, crypto: CryptoManager,
-                 user, on_logout=None, on_theme_change=None):
-        super().__init__(parent)
-        self.geometry("+5000+5000")          # off-screen: CTk auto-deiconify flash niewidoczny
-        self.wm_attributes("-alpha", 0.0)   # alpha=0 na starcie; slide_fade_in ujawni okno
+                 user, on_close, on_logout=None, on_theme_change=None):
+        super().__init__(parent, corner_radius=0, fg_color=("gray95", "#1a1a1a"))
         self.db              = db
         self.crypto          = crypto
         self.user            = user
+        self.on_close        = on_close
         self.on_logout       = on_logout
         self.on_theme_change = on_theme_change
         self._prefs             = PrefsManager()
@@ -71,50 +70,27 @@ class SettingsWindow(ctk.CTkToplevel):
         self._hdr_separator     = None
         self._current_tab       = "appearance"
 
-        self.title("Ustawienia")
-        self.geometry("520x660")
-        self.resizable(False, False)
-        self.grab_set()
-        self.focus()
-        self.protocol("WM_DELETE_WINDOW", self._safe_destroy)
-
         self._build_ui()
-        self.after(20, lambda: slide_fade_in(self, slide_px=4, duration_ms=60, steps=12))
 
-    def _safe_destroy(self):
+    def _safe_close(self):
         try:
             if self._hdr_separator:
                 self._hdr_separator.stop_animation()
         except Exception:
             pass
         try:
-            self.grab_release()
-        except Exception:
-            pass
-        try:
-            self.destroy()
+            self.on_close()
         except Exception:
             pass
 
-    def _on_map_update_hex(self, event=None):
-        """Odświeża kolory hex tła gdy okno staje się widoczne po zmianie motywu."""
-        hbg = getattr(self, '_window_hex_bg', None)
-        if hbg and hasattr(hbg, 'update_theme'):
-            try:
-                if hbg.winfo_exists():
-                    hbg.update_theme()
-            except Exception:
-                pass
+    # alias dla wstecznej kompatybilności (callbacki wewnętrzne używają _safe_destroy)
+    _safe_destroy = _safe_close
 
     # ══════════════════════════════════════════════════════════════════
     # SZKIELET OKNA
     # ══════════════════════════════════════════════════════════════════
 
     def _build_ui(self):
-        self._window_hex_bg = apply_hex_to_window(self)
-        # Gdy okno staje się widoczne (np. po zmianie motywu przez rodzica),
-        # wymuszamy odświeżenie kolorów hex tła.
-        self.bind("<Map>", self._on_map_update_hex, add="+")
         _accent = self._prefs.get_accent()
         _hdr_bg = ("gray92", _blend_settings_accent(_accent, "#1c1c1c", 0.18))
 
@@ -122,10 +98,21 @@ class SettingsWindow(ctk.CTkToplevel):
         self._hdr_frame = ctk.CTkFrame(self, fg_color=_hdr_bg, corner_radius=0)
         self._hdr_frame.pack(fill="x")
 
+        ctk.CTkButton(
+            self._hdr_frame, text="← Wstecz",
+            width=95, height=32,
+            font=ctk.CTkFont(size=12),
+            fg_color="transparent",
+            hover_color=("gray82", "#2a2a2a"),
+            text_color=(_accent, _accent),
+            corner_radius=8,
+            command=self._safe_close,
+        ).pack(side="left", padx=(12, 0), pady=12)
+
         ctk.CTkLabel(
             self._hdr_frame, text="⚙️  Ustawienia",
             font=ctk.CTkFont(size=19, weight="bold")
-        ).pack(side="left", padx=20, pady=14)
+        ).pack(side="left", padx=(8, 20), pady=14)
 
         self._hdr_user_lbl = ctk.CTkLabel(
             self._hdr_frame, text=f"👤  {self.user.username}",
@@ -187,10 +174,10 @@ class SettingsWindow(ctk.CTkToplevel):
         ).pack(side="bottom", fill="x")
 
         ctk.CTkButton(
-            self, text="Zamknij", height=42,
+            self, text="← Wstecz", height=42,
             fg_color="transparent", hover_color=("gray85", "#252525"),
             text_color=("gray30", "gray65"), corner_radius=0,
-            command=self._safe_destroy
+            command=self._safe_close
         ).pack(side="bottom", fill="x")
 
         # ── Obszar treści — ramki nakładane przez place() + lift() ────
@@ -857,14 +844,6 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _update_hex_accents(self, new_accent: str) -> None:
         """Aktualizuje kolor akcentu hex tła we wszystkich warstwach okna ustawień."""
-        # Warstwa okna (HexBackground z apply_hex_to_window)
-        hbg = getattr(self, '_window_hex_bg', None)
-        if hbg is not None:
-            try:
-                if hbg.winfo_exists() and hasattr(hbg, 'update_accent'):
-                    hbg.update_accent(new_accent)
-            except Exception:
-                pass
         # Warstwy scrollable w zakładkach (CTkScrollableFrame._parent_canvas)
         for tab_frame in getattr(self, '_tab_frames', {}).values():
             try:
@@ -889,6 +868,11 @@ class SettingsWindow(ctk.CTkToplevel):
             ctk.set_appearance_mode("dark")
         else:
             ctk.set_appearance_mode("light")
+        # Wymuś natychmiastowe przerysowanie CTK widgetów po zmianie trybu.
+        try:
+            self.update_idletasks()
+        except Exception:
+            pass
         # GradientCanvas nie reaguje na zmianę trybu CTK — wymuszamy odświeżenie.
         # after(50) daje CTK czas na przemalowanie widgetów zanim przerysujemy gradienty.
         self.after(50, lambda: self._select_color_theme(self._prefs.get("color_theme")))

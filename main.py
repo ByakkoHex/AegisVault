@@ -1,28 +1,16 @@
+#! python3.10
 """
-main.py - Punkt wejścia aplikacji AegisVault
-=============================================
+main.py - Punkt wejścia aplikacji AegisVault (PyQt6)
+=====================================================
 Uruchomienie: py main.py
 """
 
-from gui.login_window import LoginWindow
-from gui.main_window import MainWindow
-from utils.font_manager import setup_fonts
-from utils.logger import setup_logging
-from utils.paths import get_db_path
-from utils.prefs_manager import PrefsManager
-import customtkinter as ctk
-import tkinter as tk
 import sys
 import os
 
-
-def _suppress_stale_after_errors(exc, val, tb):
-    """Wycisza 'invalid command name' — harmless callbacks po zniszczeniu widgetu."""
-    if "invalid command name" in str(val):
-        return
-    # Pozostałe błędy wyświetl standardowo
-    import traceback
-    traceback.print_exception(exc, val, tb)
+from utils.logger import setup_logging
+from utils.paths import get_db_path
+from utils.prefs_manager import PrefsManager
 
 
 def _acquire_mutex():
@@ -48,36 +36,21 @@ def _acquire_mutex():
 def main():
     prefs = PrefsManager()
     setup_logging(prefs.get("log_retention_days"))
-    # Załaduj font Roboto
-    APP_FONT = setup_fonts()
-    # Ustaw globalnie dla CTk
-    ctk.CTkFont._default_font_family = APP_FONT
 
-    # Ikona aplikacji (pasek zadań + Alt+Tab)
-    _icon = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
+    from gui_qt.app import create_app
+    app = create_app()
 
-    # 1. Pokaż okno logowania (z cross-platform ścieżką DB)
+    from gui_qt.login_window import LoginWindow
     login = LoginWindow(db_path=get_db_path("aegisvault.db"))
-    login.report_callback_exception = _suppress_stale_after_errors
-    if os.path.exists(_icon):
-        login.iconbitmap(_icon)
-    login.mainloop()
+    login.show()
+    app.exec()
 
-    # 2. Jeśli zalogowano — otwórz główne okno
+    # Po zamknięciu LoginWindow — sprawdź czy zalogowano
     if login.logged_user and login.crypto:
-        # Hide the (already-destroyed) login window to close any lingering frame
-        # before the main window builds; guard in case it was already destroyed.
-        try:
-            login.withdraw()
-        except Exception:
-            pass
-
-        app = MainWindow(login.db, login.crypto, login.logged_user)
-        app.report_callback_exception = _suppress_stale_after_errors
-        if os.path.exists(_icon):
-            app.iconbitmap(_icon)
-        app.protocol("WM_DELETE_WINDOW", app.on_close)
-        app.mainloop()
+        from gui_qt.main_window import MainWindow
+        main_win = MainWindow(login.db, login.crypto, login.logged_user)
+        main_win.show()
+        app.exec()
 
 
 if __name__ == "__main__":

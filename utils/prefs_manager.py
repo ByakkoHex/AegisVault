@@ -43,6 +43,10 @@ THEMES: dict = {
     "pink":    {"accent": "#D53F8C", "hover": "#b83280", "label": "Różowy"},
     "purple":  {"accent": "#805AD5", "hover": "#6b46c1", "label": "Fioletowy"},
     "rose":    {"accent": "#F56565", "hover": "#e53e3e", "label": "Róż"},
+    # Dodatkowe
+    "navy":    {"accent": "#1B4F72", "hover": "#154060", "label": "Granatowy"},
+    "magenta": {"accent": "#D81B60", "hover": "#b5154f", "label": "Magenta"},
+    "mint":    {"accent": "#00BFA5", "hover": "#009e88", "label": "Miętowy"},
 }
 
 

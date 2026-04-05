@@ -325,9 +325,20 @@ def apply_hex_to_canvas(
         """Wywoływane przez CTk AppearanceModeTracker przy zmianie trybu Dark/Light."""
         if not _alive():
             return
-        # Wymuś pełne przerysowanie siatki (reset last_wh) z nowym kolorem tła
+        # Natychmiastowa aktualizacja base_col i outline'ów hexów
+        # (wywoływane PO callbackach CTK — widgety są już zaktualizowane)
+        new_base = _hex_base_col()
+        state["base_col"] = new_base
+        for iid in list(state["hex_ids"]):
+            if iid not in state["glowing"]:
+                try:
+                    canvas.itemconfig(iid, outline=new_base)
+                except tk.TclError:
+                    pass
+        # Pełne przerysowanie siatki (reset last_wh) — odłożone żeby CTK
+        # zdążył zakończyć layout zanim sprawdzimy wymiary canvasa
         state["last_wh"] = (-1, -1)
-        canvas.after_idle(_draw)
+        canvas.after(80, _draw)
 
     def _stop_animation():
         state["active"] = False
@@ -600,11 +611,35 @@ class HexBackground(tk.Canvas):
     def _on_appearance_change(self, mode: str) -> None:
         """Wywoływane przez CTk AppearanceModeTracker przy zmianie trybu. Wymusza rebuild."""
         try:
-            if self.winfo_exists():
-                self._last_size = (-1, -1)
-                self.after_idle(self._rebuild)
+            if not self.winfo_exists():
+                return
         except Exception:
-            pass
+            return
+        import sys
+        print(f"[HexBG] _on_appearance_change: mode={mode!r}, hidden={self._hidden_grid}", file=sys.stderr)
+        # Natychmiastowa aktualizacja bg canvasa i kolorów hexów —
+        # HexBackground rejestruje się PO widgetach CTK, więc w tym momencie
+        # CTK już zaktualizował swoje widgety; możemy bezpiecznie rysować.
+        is_dark = (mode.lower() == "dark")
+        if not self._hidden_grid:
+            new_bg = _DARK_BG if is_dark else _LIGHT_BG
+            try:
+                self.configure(bg=new_bg)
+                print(f"[HexBG] configure(bg={new_bg!r}) → actual bg={self.cget('bg')!r}", file=sys.stderr)
+            except tk.TclError as e:
+                print(f"[HexBG] configure ERROR: {e}", file=sys.stderr)
+        new_col = self.cget("bg") if self._hidden_grid else (_DARK_HEX if is_dark else _LIGHT_HEX)
+        self._hex_col_val = new_col
+        # Zaktualizuj od razu outline'y nie-świecących hexów
+        for iid in list(self._hex_ids):
+            if iid not in self._glowing:
+                try:
+                    self.itemconfig(iid, outline=new_col)
+                except tk.TclError:
+                    pass
+        # Pełny rebuild (siatka + wymiary) po krótkim opóźnieniu
+        self._last_size = (-1, -1)
+        self.after(80, self._rebuild)
 
     def update_accent(self, new_accent: str | None = None) -> None:
         """
@@ -635,6 +670,14 @@ class HexBackground(tk.Canvas):
             return
         self._last_size = (-1, -1)
         self._rebuild()
+
+    def start_animation(self) -> None:
+        """Wznawia animację glow po wcześniejszym stop_animation()."""
+        if self._animate:
+            return
+        self._animate = True
+        if self._hex_ids:
+            self._schedule_glow()
 
     def stop_animation(self) -> None:
         """Zatrzymuje animację glow. Bezpieczne do wywołania w <Destroy>."""
