@@ -59,9 +59,14 @@ class SecurityAnalysisWindow(QDialog):
         self._analyse()
         self._build_ui()
 
-        from gui_qt.animations import fade_in
+        from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
         self.setWindowOpacity(0.0)
-        fade_in(self, duration_ms=120)
+        self._fade_anim = QPropertyAnimation(self, b"windowOpacity")
+        self._fade_anim.setDuration(150)
+        self._fade_anim.setStartValue(0.0)
+        self._fade_anim.setEndValue(1.0)
+        self._fade_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        self._fade_anim.start()
 
     # ──────────────────────────────────────────────────────────────────
     # ANALIZA
