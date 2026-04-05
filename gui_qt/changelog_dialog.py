@@ -2,11 +2,12 @@
 changelog_dialog.py — Dialog "Co nowego" po aktualizacji AegisVault (PyQt6)
 ============================================================================
 Pokazywany raz po uruchomieniu aplikacji w nowej wersji.
+Wyświetla historię wersji z tytułami i listą zmian.
 """
 
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QTextEdit, QFrame,
+    QPushButton, QScrollArea, QFrame,
 )
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 
@@ -30,16 +31,15 @@ def _is_dark() -> bool:
 
 
 class ChangelogDialog(QDialog):
-    """Dialog 'Co nowego w wersji X.Y.Z' pokazywany po pierwszym uruchomieniu po aktualizacji."""
+    """Dialog 'Co nowego' pokazywany po pierwszym uruchomieniu po aktualizacji."""
 
     def __init__(self, parent: QWidget, version: str, changelog: str, accent: str = ""):
         super().__init__(parent)
-        self._version   = version
-        self._changelog = changelog
-        self._accent    = accent or _accent()
+        self._version = version
+        self._accent  = accent or _accent()
 
         self.setWindowTitle("")
-        self.setFixedSize(500, 480)
+        self.setFixedSize(520, 560)
         self.setModal(True)
         self.setWindowFlags(
             Qt.WindowType.Dialog |
@@ -47,7 +47,7 @@ class ChangelogDialog(QDialog):
         )
         self._build()
 
-        # Fade-in przez windowOpacity (nie QGraphicsOpacityEffect)
+        # Fade-in przez windowOpacity
         self.setWindowOpacity(0.0)
         self._fade_anim = QPropertyAnimation(self, b"windowOpacity")
         self._fade_anim.setDuration(150)
@@ -57,96 +57,168 @@ class ChangelogDialog(QDialog):
         self._fade_anim.start()
 
     def _build(self):
-        dark = _is_dark()
-        bg   = "#1e1e1e" if dark else "#ffffff"
-        fg   = "#e8e8e8" if dark else "#1a1a1a"
-        sub  = "#888888"
-        brd  = "#2e2e2e" if dark else "#d0d0d0"
-        acc  = self._accent
+        dark  = _is_dark()
+        bg    = "#1a1a1a" if dark else "#f5f5f5"
+        fg    = "#e8e8e8" if dark else "#1a1a1a"
+        muted = "#888888" if dark else "#666666"
+        brd   = "#2e2e2e" if dark else "#d0d0d0"
+        card  = "#242424" if dark else "#ffffff"
+        acc   = self._accent
         acc_h = _accent_hover()
 
         self.setStyleSheet(f"""
             QDialog {{
                 background: {bg};
                 border: 1px solid {brd};
-                border-radius: 12px;
+                border-radius: 14px;
             }}
+            QLabel {{ background: transparent; border: none; color: {fg}; }}
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{ background: transparent; width: 5px; }}
+            QScrollBar::handle:vertical {{
+                background: {'#444' if dark else '#ccc'};
+                border-radius: 2px; min-height: 20px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
         """)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Nagłówek (accent color) ──────────────────────────────
+        # ── Nagłówek ──────────────────────────────────────────────
         hdr = QFrame()
-        hdr.setFixedHeight(70)
+        hdr.setFixedHeight(76)
         hdr.setStyleSheet(f"""
             QFrame {{
                 background: {acc};
-                border-top-left-radius: 12px;
-                border-top-right-radius: 12px;
+                border-top-left-radius: 14px;
+                border-top-right-radius: 14px;
             }}
         """)
-        hdr_lay = QHBoxLayout(hdr)
-        hdr_lay.setContentsMargins(20, 0, 20, 0)
+        hl = QHBoxLayout(hdr)
+        hl.setContentsMargins(24, 0, 24, 0)
 
-        rocket_lbl = QLabel("🚀  Co nowego?")
-        rocket_lbl.setStyleSheet(
-            "color: #ffffff; font-size: 20px; font-weight: bold; background: transparent;"
+        title_lbl = QLabel("🚀  Co nowego w AegisVault?")
+        title_lbl.setStyleSheet(
+            "color: white; font-size: 18px; font-weight: bold;"
         )
-        hdr_lay.addWidget(rocket_lbl, 1)
+        hl.addWidget(title_lbl, 1)
 
-        ver_hdr_lbl = QLabel(f"v{self._version}")
-        ver_hdr_lbl.setStyleSheet(
-            "color: rgba(255,255,255,0.7); font-size: 13px; background: transparent;"
+        ver_lbl = QLabel(f"v{self._version}")
+        ver_lbl.setStyleSheet(
+            "color: rgba(255,255,255,0.75); font-size: 13px; font-weight: 600;"
         )
-        hdr_lay.addWidget(ver_hdr_lbl)
+        hl.addWidget(ver_lbl)
         root.addWidget(hdr)
 
-        # ── Treść ────────────────────────────────────────────────
-        body = QWidget()
-        body.setStyleSheet("background: transparent;")
-        body_lay = QVBoxLayout(body)
-        body_lay.setContentsMargins(24, 16, 24, 16)
-        body_lay.setSpacing(8)
+        # ── Scroll z kartami wersji ───────────────────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        subtitle = QLabel(f"AegisVault został zaktualizowany do wersji {self._version}.")
-        subtitle.setStyleSheet(f"color: {sub}; font-size: 12px;")
-        body_lay.addWidget(subtitle)
+        inner = QWidget()
+        inner.setStyleSheet(f"background: {bg};")
+        vl = QVBoxLayout(inner)
+        vl.setContentsMargins(20, 16, 20, 8)
+        vl.setSpacing(12)
 
-        changelog_box = QTextEdit()
-        changelog_box.setReadOnly(True)
-        changelog_box.setPlainText(self._changelog.strip())
-        cl_bg  = "#252525" if dark else "#f5f5f5"
-        cl_brd = "#333333" if dark else "#cccccc"
-        changelog_box.setStyleSheet(f"""
-            QTextEdit {{
-                background: {cl_bg};
-                color: {fg};
-                border: 1px solid {cl_brd};
-                border-radius: 10px;
-                padding: 10px;
-                font-size: 12px;
-                font-family: Consolas, 'Courier New', monospace;
-            }}
-        """)
-        body_lay.addWidget(changelog_box, 1)
+        # Wczytaj historię wersji
+        try:
+            from version import VERSION_HISTORY
+            history = VERSION_HISTORY
+        except Exception:
+            history = []
 
-        # ── Przycisk OK ──────────────────────────────────────────
+        for i, (ver, title, changes) in enumerate(history):
+            card_w = QFrame()
+            card_w.setStyleSheet(f"""
+                QFrame {{
+                    background: {card};
+                    border-radius: 10px;
+                    border: 1px solid {brd};
+                }}
+            """)
+            cl = QVBoxLayout(card_w)
+            cl.setContentsMargins(16, 12, 16, 14)
+            cl.setSpacing(6)
+
+            # Nagłówek karty: wersja + tytuł
+            hdr_row = QWidget()
+            hdr_row.setStyleSheet("background: transparent; border: none;")
+            hr = QHBoxLayout(hdr_row)
+            hr.setContentsMargins(0, 0, 0, 0)
+            hr.setSpacing(10)
+
+            ver_badge = QLabel(f"v{ver}")
+            badge_bg  = acc if i == 0 else ("#3a3a3a" if dark else "#e0e0e0")
+            badge_fg  = "white" if i == 0 else muted
+            ver_badge.setStyleSheet(
+                f"background: {badge_bg}; color: {badge_fg}; "
+                "font-size: 11px; font-weight: bold; "
+                "padding: 2px 8px; border-radius: 6px; border: none;"
+            )
+            ver_badge.setFixedHeight(20)
+            hr.addWidget(ver_badge)
+
+            title_l = QLabel(title)
+            title_l.setStyleSheet(
+                f"color: {fg}; font-size: 13px; font-weight: {'bold' if i == 0 else '600'};"
+            )
+            hr.addWidget(title_l, 1)
+            cl.addWidget(hdr_row)
+
+            # Separator
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.HLine)
+            sep.setStyleSheet(f"color: {brd}; border: none; background: {brd}; max-height: 1px;")
+            cl.addWidget(sep)
+
+            # Lista zmian
+            for change in changes:
+                row = QWidget()
+                row.setStyleSheet("background: transparent; border: none;")
+                rl = QHBoxLayout(row)
+                rl.setContentsMargins(0, 1, 0, 1)
+                rl.setSpacing(8)
+
+                dot = QLabel("•")
+                dot.setFixedWidth(10)
+                dot.setStyleSheet(f"color: {acc if i == 0 else muted}; font-size: 14px;")
+                rl.addWidget(dot)
+
+                txt = QLabel(change)
+                txt.setWordWrap(True)
+                txt.setStyleSheet(f"color: {fg if i == 0 else muted}; font-size: 12px;")
+                rl.addWidget(txt, 1)
+                cl.addWidget(row)
+
+            vl.addWidget(card_w)
+
+        vl.addStretch()
+        scroll.setWidget(inner)
+        root.addWidget(scroll, 1)
+
+        # ── Stopka z przyciskiem ──────────────────────────────────
+        footer = QWidget()
+        footer.setStyleSheet(f"background: {bg}; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px;")
+        fl = QHBoxLayout(footer)
+        fl.setContentsMargins(20, 10, 20, 16)
+
         ok_btn = QPushButton("✓  Super, dzięki!")
         ok_btn.setFixedHeight(42)
         ok_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {acc};
-                color: #ffffff;
+                color: white;
                 border: none;
-                border-radius: 12px;
+                border-radius: 10px;
                 font-size: 13px;
                 font-weight: bold;
             }}
             QPushButton:hover {{ background: {acc_h}; }}
         """)
         ok_btn.clicked.connect(self.accept)
-        body_lay.addWidget(ok_btn)
-
-        root.addWidget(body, 1)
+        fl.addWidget(ok_btn)
+        root.addWidget(footer)
