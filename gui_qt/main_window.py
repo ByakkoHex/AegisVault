@@ -578,6 +578,218 @@ class PasswordFormDialog(QDialog):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# ExportDialog — wybór formatu i eksport haseł
+# ══════════════════════════════════════════════════════════════════════
+
+class ExportDialog(QDialog):
+    _FORMATS = [
+        ("aegis",    "🔒 AegisVault (.aegis)",       "Zaszyfrowany backup — tylko dla AegisVault.",             "aegisvault_backup.aegis",    "AegisVault Backup (*.aegis)"),
+        ("csv",      "📄 Generic CSV (.csv)",         "Kompatybilny z większością menedżerów haseł.",           "export_aegisvault.csv",      "CSV (*.csv)"),
+        ("bitwarden","🔵 Bitwarden JSON (.json)",     "Import bezpośrednio do Bitwarden.",                       "bitwarden_export.json",      "JSON (*.json)"),
+        ("1password","🔑 1Password CSV (.csv)",       "Import do 1Password przez File → Import.",               "1password_export.csv",       "CSV (*.csv)"),
+        ("keepass",  "🟢 KeePass XML (.xml)",         "Import do KeePass 2 / KeePassXC.",                       "keepass_export.xml",         "XML (*.xml)"),
+    ]
+
+    def __init__(self, parent, db, crypto, user):
+        super().__init__(parent)
+        self.db     = db
+        self.crypto = crypto
+        self.user   = user
+
+        self.setWindowTitle("Eksport haseł")
+        self.setFixedSize(480, 480)
+
+        _p    = PrefsManager()
+        accent = _p.get_accent()
+        dark   = (_p.get("appearance_mode") or "dark").lower() != "light"
+        bg_rgba  = "rgba(18,18,18,0.92)" if dark else "rgba(240,240,240,0.92)"
+        bg_card  = "#242424" if dark else "#f8f8f8"
+        bg_sel   = "#1a2a3a" if dark else "#ddeeff"
+        bdr_sel  = accent
+        bdr_norm = "#3a3a3a" if dark else "#dddddd"
+        text_col = "#f0f0f0" if dark else "#1a1a1a"
+        muted    = "#888888" if dark else "#666666"
+
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setStyleSheet(f"""
+            QDialog {{ background: {bg_rgba}; border-radius: 14px; }}
+            QLabel  {{ background: transparent; border: none; color: {text_col}; }}
+        """)
+
+        vl = QVBoxLayout(self)
+        vl.setContentsMargins(20, 16, 20, 16)
+        vl.setSpacing(10)
+
+        title_lbl = QLabel("Eksport haseł")
+        title_lbl.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {text_col};")
+        vl.addWidget(title_lbl)
+
+        sep = AnimatedGradientWidget(accent=accent, base="#161616" if dark else "#f2f2f2",
+                                     direction="h", anim_mode="slide")
+        sep.setFixedHeight(2)
+        sep.start_animation()
+        vl.addWidget(sep)
+
+        hint = QLabel("Wybierz format eksportu:")
+        hint.setStyleSheet(f"font-size: 12px; color: {muted};")
+        vl.addWidget(hint)
+
+        # Karty formatów
+        self._selected = "aegis"
+        self._cards: dict[str, QFrame] = {}
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("background: transparent; border: none;")
+        scroll.viewport().setStyleSheet("background: transparent;")
+        inner = QWidget()
+        inner.setStyleSheet("background: transparent;")
+        fl = QVBoxLayout(inner)
+        fl.setSpacing(6)
+        fl.setContentsMargins(0, 0, 0, 0)
+
+        for fmt_id, fmt_name, fmt_desc, _, _ in self._FORMATS:
+            card = QFrame()
+            card.setFixedHeight(62)
+            card.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._cards[fmt_id] = card
+            cl = QHBoxLayout(card)
+            cl.setContentsMargins(12, 8, 12, 8)
+            cl.setSpacing(10)
+            text_w = QWidget()
+            text_w.setStyleSheet("background: transparent; border: none;")
+            tl = QVBoxLayout(text_w)
+            tl.setContentsMargins(0, 0, 0, 0)
+            tl.setSpacing(2)
+            name_lbl = QLabel(fmt_name)
+            name_lbl.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {text_col};")
+            desc_lbl = QLabel(fmt_desc)
+            desc_lbl.setStyleSheet(f"font-size: 11px; color: {muted};")
+            tl.addWidget(name_lbl)
+            tl.addWidget(desc_lbl)
+            cl.addWidget(text_w, stretch=1)
+            fl.addWidget(card)
+            card.mousePressEvent = lambda _, fid=fmt_id: self._select(fid)
+
+        fl.addStretch()
+        scroll.setWidget(inner)
+        vl.addWidget(scroll, stretch=1)
+
+        # Ostrzeżenie (plaintext)
+        self._warn_lbl = QLabel("⚠️  Ten format zawiera hasła w postaci niezaszyfrowanej.\nPrzechowuj plik w bezpiecznym miejscu i usuń po użyciu.")
+        self._warn_lbl.setWordWrap(True)
+        self._warn_lbl.setStyleSheet(
+            f"color: #f0a500; font-size: 11px; font-weight: bold; "
+            f"background: {'#2a1e00' if dark else '#fff8e1'}; border-radius: 8px; padding: 8px 10px;"
+        )
+        self._warn_lbl.setVisible(False)
+        vl.addWidget(self._warn_lbl)
+
+        # Przyciski
+        btn_row = QWidget()
+        brl = QHBoxLayout(btn_row)
+        brl.setContentsMargins(0, 0, 0, 0)
+        brl.setSpacing(8)
+        cancel = QPushButton("Anuluj")
+        cancel.setFixedHeight(42)
+        cancel.setStyleSheet(
+            f"background: transparent; border: 1.5px solid {'#525252' if dark else '#c0c0c0'}; "
+            f"color: {muted}; border-radius: 10px; font-size: 13px;"
+        )
+        cancel.clicked.connect(self.reject)
+        brl.addWidget(cancel)
+        self._export_btn = QPushButton("Eksportuj →")
+        self._export_btn.setFixedHeight(42)
+        self._export_btn.setStyleSheet(
+            f"background: {accent}; color: white; border-radius: 10px; "
+            "font-size: 13px; font-weight: bold;"
+        )
+        self._export_btn.clicked.connect(self._do_export)
+        brl.addWidget(self._export_btn)
+        vl.addWidget(btn_row)
+
+        # Zapamiętaj stale używane kolory
+        self._bg_card = bg_card
+        self._bg_sel  = bg_sel
+        self._bdr_sel = bdr_sel
+        self._bdr_norm = bdr_norm
+        self._accent = accent
+
+        self._hex = HexBackground(self, hex_size=32, glow_max=2, glow_interval_ms=2000)
+        self._hex.setGeometry(0, 0, self.width(), self.height())
+        self._hex.lower()
+        QTimer.singleShot(0, lambda: self._hex and (
+            self._hex.setGeometry(0, 0, self.width(), self.height()), self._hex.lower()
+        ))
+
+        self._select("aegis")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_hex"):
+            self._hex.setGeometry(0, 0, self.width(), self.height())
+            self._hex.lower()
+
+    def _select(self, fmt_id: str):
+        self._selected = fmt_id
+        for fid, card in self._cards.items():
+            sel = (fid == fmt_id)
+            card.setStyleSheet(
+                f"QFrame {{ background: {self._bg_sel if sel else self._bg_card}; "
+                f"border: {'2px' if sel else '1px'} solid {self._bdr_sel if sel else self._bdr_norm}; "
+                f"border-radius: 10px; }}"
+            )
+        self._warn_lbl.setVisible(fmt_id != "aegis")
+
+    def _do_export(self):
+        fmt_dict = {f[0]: f for f in self._FORMATS}
+        _, _, _, default_name, file_filter = fmt_dict[self._selected]
+
+        path, _ = QFileDialog.getSaveFileName(self, "Eksport haseł", default_name, file_filter)
+        if not path:
+            return
+
+        self._export_btn.setEnabled(False)
+        self._export_btn.setText("Eksportuję…")
+
+        def _run():
+            try:
+                from utils.export_manager import collect_entries, export_csv, export_bitwarden_json, export_1password_csv, export_keepass_xml
+                count = 0
+                if self._selected == "aegis":
+                    count = self.db.export_passwords(self.user, self.crypto, path)
+                else:
+                    entries = collect_entries(self.db, self.crypto, self.user)
+                    if self._selected == "csv":
+                        count = export_csv(entries, path)
+                    elif self._selected == "bitwarden":
+                        count = export_bitwarden_json(entries, path)
+                    elif self._selected == "1password":
+                        count = export_1password_csv(entries, path)
+                    elif self._selected == "keepass":
+                        count = export_keepass_xml(entries, path)
+                QTimer.singleShot(0, lambda: self._done(count, path))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self._error(str(e)))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _done(self, count: int, path: str):
+        self._export_btn.setEnabled(True)
+        self._export_btn.setText("Eksportuj →")
+        show_success("Eksport zakończony",
+                     f"Wyeksportowano {count} haseł.\n\n{os.path.basename(path)}",
+                     parent=self)
+        self.accept()
+
+    def _error(self, msg: str):
+        self._export_btn.setEnabled(True)
+        self._export_btn.setText("Eksportuj →")
+        show_error("Błąd eksportu", msg, parent=self)
+
+
+# ══════════════════════════════════════════════════════════════════════
 # NoteFormDialog — dodawanie / edycja zaszyfrowanej notatki
 # ══════════════════════════════════════════════════════════════════════
 
@@ -2693,18 +2905,7 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _export(self):
-        from utils.import_manager import export_passwords_aegis
-        accent = self._prefs.get_accent()
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Eksport haseł", "aegisvault_backup.aegis",
-            "AegisVault Backup (*.aegis)"
-        )
-        if path:
-            try:
-                export_passwords_aegis(self.db, self.crypto, self.user, path)
-                show_success("Eksport", f"Eksport zapisany:\n{os.path.basename(path)}", parent=self)
-            except Exception as e:
-                show_error("Błąd eksportu", str(e), parent=self)
+        ExportDialog(self, self.db, self.crypto, self.user).exec()
 
     def _import_aegis(self):
         path, _ = QFileDialog.getOpenFileName(
