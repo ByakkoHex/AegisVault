@@ -15,6 +15,7 @@ Po udanym logowaniu: self.logged_user + self.crypto ustawione, window zamknięte
 import os
 import platform
 import threading
+import time
 import qrcode
 from PIL import Image
 from PyQt6.QtWidgets import (
@@ -100,6 +101,14 @@ class LoginWindow(QMainWindow):
         self._push_poll_timer.setInterval(2000)
         self._wh_available   = False
         self._push_client    = PushAuthClient()
+
+        # Limit prób logowania (w pamięci, reset przy restarcie)
+        self._login_attempts  = 0   # błędne próby masterhasła
+        self._totp_attempts   = 0   # błędne próby kodu TOTP
+        self._lockout_until   = 0.0 # timestamp końca lockoutu (time.monotonic)
+        self._lockout_timer   = QTimer(self)
+        self._lockout_timer.setInterval(1000)
+        self._lockout_timer.timeout.connect(self._tick_lockout)
 
         self.setWindowTitle("AegisVault — Logowanie")
         self.setFixedSize(460, 620)
@@ -216,7 +225,14 @@ class LoginWindow(QMainWindow):
         if last:
             self._login_user.setText(last)
 
-        layout.addSpacing(14)
+        # Komunikat o lockoucie / pozostałych próbach
+        self._lockout_lbl = QLabel("")
+        self._lockout_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._lockout_lbl.setStyleSheet("color: #e53e3e; font-size: 11px; background: transparent; border: none;")
+        self._lockout_lbl.setVisible(False)
+        layout.addWidget(self._lockout_lbl)
+
+        layout.addSpacing(8)
         self._btn_login = self._make_btn(layout, "Zaloguj się", self._on_login, primary=True)
 
         # Windows Hello — tylko Windows
@@ -365,6 +381,13 @@ class LoginWindow(QMainWindow):
         )
         self._totp_entry.returnPressed.connect(self._on_verify_2fa)
         totp_layout.addWidget(self._totp_entry)
+
+        self._totp_lockout_lbl = QLabel("")
+        self._totp_lockout_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._totp_lockout_lbl.setStyleSheet("color: #e53e3e; font-size: 11px; background: transparent; border: none;")
+        self._totp_lockout_lbl.setVisible(False)
+        totp_layout.addWidget(self._totp_lockout_lbl)
+
         self._make_btn(totp_layout, "Weryfikuj", self._on_verify_2fa, primary=True)
         totp_layout.addStretch()
         self._2fa_stack.addWidget(totp_page)
@@ -558,18 +581,98 @@ class LoginWindow(QMainWindow):
 
     # ── Logika ────────────────────────────────────────────────────────
 
+    # ── Lockout ───────────────────────────────────────────────────────
+
+    _MAX_LOGIN_ATTEMPTS = 5
+    _MAX_TOTP_ATTEMPTS  = 3
+    # Progi lockoutu: po N próbach → X sekund blokady
+    _LOCKOUT_STEPS = [(5, 30), (10, 300), (15, None)]  # (próby, sekundy | None=stały)
+
+    def _is_locked_out(self) -> bool:
+        return time.monotonic() < self._lockout_until
+
+    def _remaining_lockout(self) -> int:
+        return max(0, int(self._lockout_until - time.monotonic()))
+
+    def _apply_lockout(self, attempts: int):
+        for threshold, secs in self._LOCKOUT_STEPS:
+            if attempts >= threshold:
+                duration = secs if secs is not None else 9999999
+                self._lockout_until = time.monotonic() + duration
+        self._lockout_timer.start()
+        self._update_lockout_ui()
+
+    def _tick_lockout(self):
+        remaining = self._remaining_lockout()
+        self._update_lockout_ui()
+        if remaining == 0:
+            self._lockout_timer.stop()
+            self._update_lockout_ui()
+
+    def _update_lockout_ui(self):
+        remaining = self._remaining_lockout()
+        locked = remaining > 0
+
+        # Przycisk logowania
+        if hasattr(self, "_btn_login"):
+            self._btn_login.setEnabled(not locked)
+
+        # Label na stronie logowania
+        if hasattr(self, "_lockout_lbl"):
+            if locked:
+                self._lockout_lbl.setText(f"🔒 Zbyt wiele prób — odblokowanie za {remaining}s")
+                self._lockout_lbl.setVisible(True)
+            elif self._login_attempts > 0:
+                left = self._MAX_LOGIN_ATTEMPTS - self._login_attempts
+                self._lockout_lbl.setText(f"Pozostało prób: {left}")
+                self._lockout_lbl.setVisible(True)
+            else:
+                self._lockout_lbl.setVisible(False)
+
+        # Label na stronie TOTP
+        if hasattr(self, "_totp_lockout_lbl"):
+            if locked:
+                self._totp_lockout_lbl.setText(f"🔒 Zbyt wiele prób — odblokowanie za {remaining}s")
+                self._totp_lockout_lbl.setVisible(True)
+            elif self._totp_attempts > 0:
+                left = self._MAX_TOTP_ATTEMPTS - self._totp_attempts
+                self._totp_lockout_lbl.setText(f"Pozostało prób: {left}")
+                self._totp_lockout_lbl.setVisible(True)
+            else:
+                self._totp_lockout_lbl.setVisible(False)
+
+    # ── Logowanie ─────────────────────────────────────────────────────
+
     def _on_login(self):
+        if self._is_locked_out():
+            shake(self)
+            return
+
         username = self._login_user.text().strip()
         password = self._login_pass.text()
         if not username or not password:
             show_error("Błąd", "Wypełnij wszystkie pola!", parent=self)
             return
+
         user = self.db.login_user(username, password)
         if not user:
+            self._login_attempts += 1
+            self._apply_lockout(self._login_attempts)
             shake(self)
-            show_error("Błąd logowania",
-                       "Nieprawidłowa nazwa użytkownika lub hasło.", parent=self)
+            remaining_attempts = self._MAX_LOGIN_ATTEMPTS - self._login_attempts
+            if self._is_locked_out():
+                msg = f"Zbyt wiele błędnych prób.\nOdblokowanie za {self._remaining_lockout()}s."
+            elif remaining_attempts <= 2:
+                msg = f"Nieprawidłowe hasło.\nPozostało prób: {remaining_attempts}."
+            else:
+                msg = "Nieprawidłowa nazwa użytkownika lub hasło."
+            show_error("Błąd logowania", msg, parent=self)
             return
+
+        # Udane logowanie — resetuj licznik
+        self._login_attempts = 0
+        self._update_lockout_ui()
+
         if user.totp_secret:
             self._temp_password = password
             self._show_2fa(user)
@@ -577,16 +680,30 @@ class LoginWindow(QMainWindow):
             self._complete_login(user, password)
 
     def _on_verify_2fa(self):
+        if self._is_locked_out():
+            shake(self)
+            return
+
         code = self._totp_entry.text().strip()
         user = self._pending_user
         totp = TOTPManager(secret=user.totp_secret)
         if not totp.verify(code):
+            self._totp_attempts += 1
+            self._apply_lockout(self._totp_attempts)
             shake(self)
-            show_error("Błąd 2FA",
-                       "Nieprawidłowy kod!\n\nSprawdź czy zegar systemowy "
-                       "jest zsynchronizowany.", parent=self)
+            remaining_attempts = self._MAX_TOTP_ATTEMPTS - self._totp_attempts
+            if self._is_locked_out():
+                msg = f"Zbyt wiele błędnych prób.\nOdblokowanie za {self._remaining_lockout()}s."
+            elif remaining_attempts <= 1:
+                msg = f"Nieprawidłowy kod!\nPozostało prób: {remaining_attempts}."
+            else:
+                msg = "Nieprawidłowy kod!\n\nSprawdź czy zegar systemowy jest zsynchronizowany."
+            show_error("Błąd 2FA", msg, parent=self)
             self._totp_entry.clear()
             return
+
+        # Udana weryfikacja — resetuj licznik
+        self._totp_attempts = 0
         self._complete_login(user, self._temp_password)
 
     def _on_register(self):
