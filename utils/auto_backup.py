@@ -2,7 +2,7 @@
 auto_backup.py - Automatyczny backup haseł AegisVault
 """
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from utils.paths import get_app_data_dir
 from utils.logger import get_logger
 
@@ -35,7 +35,7 @@ def should_backup(prefs) -> bool:
         return True
     try:
         last = datetime.fromisoformat(last_str)
-        return datetime.utcnow() - last >= interval
+        return datetime.now(timezone.utc) - last >= interval
     except ValueError:
         return True
 
@@ -47,7 +47,7 @@ def do_backup(db, crypto, user, prefs) -> str | None:
     filepath = os.path.join(backup_dir, f"backup_{user.username}_{ts}.aegis")
     try:
         count = db.export_passwords(user, crypto, filepath)
-        prefs.set("last_backup_at", datetime.utcnow().isoformat())
+        prefs.set("last_backup_at", datetime.now(timezone.utc).isoformat())
         logger.info(f"Auto-backup: {count} haseł → {filepath}")
         _cleanup_old_backups(backup_dir, keep=30)
         return filepath

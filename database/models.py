@@ -8,7 +8,7 @@ Tabele:
   custom_categories — własne kategorie użytkownika
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     create_engine, Column, Integer, String,
     LargeBinary, ForeignKey, DateTime, Text, Index, event
@@ -72,7 +72,7 @@ class Password(Base):
         """Zwraca 'expired', 'soon' (≤7 dni), 'ok', lub None."""
         if not self.expires_at:
             return None
-        delta = (self.expires_at - datetime.utcnow()).days
+        delta = (self.expires_at - datetime.now(timezone.utc)).days
         if delta < 0:
             return "expired"
         if delta <= 7:

@@ -21,7 +21,7 @@ import threading
 import time
 import webbrowser
 import pyperclip
-from datetime import datetime
+from datetime import datetime, timezone
 from PIL import Image
 
 from PyQt6.QtWidgets import (
@@ -781,7 +781,7 @@ class TrashDialog(QDialog):
             days_txt = ""
             if entry.deleted_at:
                 from database.db_manager import TRASH_DAYS
-                removed = (datetime.utcnow() - entry.deleted_at).days
+                removed = (datetime.now(timezone.utc) - entry.deleted_at).days
                 left = TRASH_DAYS - removed
                 days_txt = f"Usunięto: {entry.deleted_at.strftime('%d.%m.%Y')}  •  Pozostało {left} dni"
             d = QLabel(days_txt)
@@ -932,7 +932,7 @@ class PasswordRowWidget(QFrame):
             # Expiry badge
             exp = getattr(entry, "expiry_status", None)
             if exp in ("expired", "soon"):
-                days = max(0, (entry.expires_at - datetime.utcnow()).days) if entry.expires_at else 0
+                days = max(0, (entry.expires_at - datetime.now(timezone.utc)).days) if entry.expires_at else 0
                 exp_lbl = QLabel("Wygasłe" if exp == "expired" else f"Za {days}d")
                 bg_col = "#4a1a1a" if exp == "expired" else "#4a3a00"
                 tc_col = "#ff8080" if exp == "expired" else "#ffcc00"

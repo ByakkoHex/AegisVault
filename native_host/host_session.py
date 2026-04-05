@@ -5,7 +5,7 @@ Przechowuje CryptoManager i dane użytkownika na czas sesji.
 Sesja wygasa po SESSION_DURATION sekundach bezczynności (sliding window).
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ def create_session(user: "User", crypto: "CryptoManager") -> datetime:
     _user = user
     _crypto = crypto
     _username = user.username
-    _expires_at = datetime.utcnow() + timedelta(seconds=SESSION_DURATION)
+    _expires_at = datetime.now(timezone.utc) + timedelta(seconds=SESSION_DURATION)
     return _expires_at
 
 
@@ -44,14 +44,14 @@ def is_valid() -> bool:
     """Zwraca True jeśli sesja istnieje i nie wygasła."""
     if _crypto is None or _expires_at is None:
         return False
-    return datetime.utcnow() < _expires_at
+    return datetime.now(timezone.utc) < _expires_at
 
 
 def refresh() -> None:
     """Przesuwa okno wygaśnięcia sesji (sliding expiry)."""
     global _expires_at
     if _expires_at is not None:
-        _expires_at = datetime.utcnow() + timedelta(seconds=SESSION_DURATION)
+        _expires_at = datetime.now(timezone.utc) + timedelta(seconds=SESSION_DURATION)
 
 
 def get_crypto() -> Optional["CryptoManager"]:

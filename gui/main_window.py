@@ -21,7 +21,7 @@ import pyperclip
 import threading
 import time
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from PIL import Image
 
 from database.db_manager import DatabaseManager
@@ -1071,7 +1071,7 @@ class TrashWindow(ctk.CTkToplevel):
         days_left = ""
         if entry.deleted_at:
             from database.db_manager import TRASH_DAYS
-            removed = (datetime.utcnow() - entry.deleted_at).days
+            removed = (datetime.now(timezone.utc) - entry.deleted_at).days
             left    = TRASH_DAYS - removed
             days_left = f"Usunięto: {entry.deleted_at.strftime('%d.%m.%Y')}  •  Pozostało {left} dni"
         ctk.CTkLabel(info, text=days_left, font=ctk.CTkFont(size=10),
@@ -1590,7 +1590,7 @@ class PasswordRow(ctk.CTkFrame):
 
             exp = self.entry.expiry_status
             if exp in ("expired", "soon"):
-                days = max(0, (self.entry.expires_at - datetime.utcnow()).days) if self.entry.expires_at else 0
+                days = max(0, (self.entry.expires_at - datetime.now(timezone.utc)).days) if self.entry.expires_at else 0
                 self._make_expiry_badge(single_row, days, is_expired=(exp == "expired"))
 
             if self.entry.username:
@@ -1607,7 +1607,7 @@ class PasswordRow(ctk.CTkFrame):
 
             exp = self.entry.expiry_status
             if exp in ("expired", "soon"):
-                days = max(0, (self.entry.expires_at - datetime.utcnow()).days) if self.entry.expires_at else 0
+                days = max(0, (self.entry.expires_at - datetime.now(timezone.utc)).days) if self.entry.expires_at else 0
                 self._make_expiry_badge(title_row, days, is_expired=(exp == "expired"))
 
             sub = self.entry.username or "—"

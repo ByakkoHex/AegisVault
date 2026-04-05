@@ -16,7 +16,7 @@ Endpointy:
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import secrets
 import json
@@ -75,7 +75,7 @@ def get_current_user(authorization: str = Header(...)) -> str:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "time": datetime.utcnow().isoformat()}
+    return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/version")
@@ -139,7 +139,7 @@ def push(req: PushRequest, username: str = Depends(get_current_user)):
     created = 0
 
     for entry in req.entries:
-        ts = datetime.utcnow()
+        ts = datetime.now(timezone.utc)
         if entry.updated_at:
             try:
                 ts = datetime.fromisoformat(entry.updated_at)
@@ -229,7 +229,7 @@ def push_create(req: PushCreateRequest):
     # Wyczyść stare wygasłe wyzwania tego użytkownika
     db.query(PushChallenge).filter(
         PushChallenge.username == req.username,
-        PushChallenge.expires_at < datetime.utcnow()
+        PushChallenge.expires_at < datetime.now(timezone.utc)
     ).delete()
     db.commit()
 
@@ -237,7 +237,7 @@ def push_create(req: PushCreateRequest):
     challenge = PushChallenge(
         token=token,
         username=req.username,
-        expires_at=datetime.utcnow() + timedelta(seconds=PUSH_TTL_SECONDS),
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=PUSH_TTL_SECONDS),
     )
     db.add(challenge)
     db.commit()
@@ -256,7 +256,7 @@ def push_page(token: str):
     if challenge.is_expired:
         return HTMLResponse(_push_html(challenge.username, token, 0, error="Żądanie wygasło."))
 
-    remaining = max(0, int((challenge.expires_at - datetime.utcnow()).total_seconds()))
+    remaining = max(0, int((challenge.expires_at - datetime.now(timezone.utc)).total_seconds()))
     return HTMLResponse(_push_html(challenge.username, token, remaining))
 
 

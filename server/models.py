@@ -3,9 +3,8 @@ models.py - Modele bazy danych serwera synchronizacji
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import create_engine, Column, Integer, String, LargeBinary, DateTime, Text
-from datetime import timedelta
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()
@@ -50,7 +49,7 @@ class PushChallenge(Base):
 
     @property
     def is_expired(self) -> bool:
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
 
 PUSH_TTL_SECONDS = 120

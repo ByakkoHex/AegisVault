@@ -4,7 +4,7 @@ auth.py - Autoryzacja JWT dla serwera synchronizacji
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 import bcrypt
 
@@ -27,7 +27,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_token(username: str) -> str:
-    expire = datetime.utcnow() + timedelta(days=TOKEN_EXPIRE_DAYS)
+    expire = datetime.now(timezone.utc) + timedelta(days=TOKEN_EXPIRE_DAYS)
     return jwt.encode({"sub": username, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 

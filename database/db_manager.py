@@ -4,7 +4,7 @@ db_manager.py - Operacje na bazie danych dla Password Managera
 
 import json
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 from database.models import User, Password, PasswordHistory, CustomCategory, init_db, DEFAULT_CATEGORIES
@@ -87,7 +87,7 @@ class DatabaseManager:
 
     def get_expiring_passwords(self, user) -> list[Password]:
         """Hasła wygasłe lub wygasające w ciągu 7 dni."""
-        threshold = datetime.utcnow() + timedelta(days=7)
+        threshold = datetime.now(timezone.utc) + timedelta(days=7)
         return (self.session.query(Password)
                 .filter(
                     Password.user_id == user.id,
@@ -105,7 +105,7 @@ class DatabaseManager:
 
     def mark_used(self, entry) -> None:
         """Aktualizuje last_used_at (przy kopiowaniu hasła)."""
-        entry.last_used_at = datetime.utcnow()
+        entry.last_used_at = datetime.now(timezone.utc)
         self.session.commit()
 
     # ──────────────────────────────────────────────
@@ -142,7 +142,7 @@ class DatabaseManager:
         if notes is not None:              entry.notes = notes
         if category is not None:           entry.category = category
         if expires_at is not None:         entry.expires_at = expires_at
-        entry.updated_at = datetime.utcnow()
+        entry.updated_at = datetime.now(timezone.utc)
         self.session.commit()
         return entry
 
@@ -182,7 +182,7 @@ class DatabaseManager:
         """Przywraca hasło z wybranego wpisu historii."""
         self._save_history(entry)
         entry.encrypted_password = hist.encrypted_password
-        entry.updated_at = datetime.utcnow()
+        entry.updated_at = datetime.now(timezone.utc)
         self.session.commit()
 
     # ──────────────────────────────────────────────
@@ -192,7 +192,7 @@ class DatabaseManager:
     def trash_password(self, entry: Password) -> None:
         """Przenosi hasło do kosza (soft delete)."""
         entry.is_deleted = 1
-        entry.deleted_at = datetime.utcnow()
+        entry.deleted_at = datetime.now(timezone.utc)
         self.session.commit()
 
     def restore_password(self, entry: Password) -> None:
@@ -214,7 +214,7 @@ class DatabaseManager:
 
     def purge_old_trash(self, user) -> int:
         """Trwale usuwa wpisy w koszu starsze niż TRASH_DAYS dni. Zwraca liczbę usuniętych."""
-        cutoff = datetime.utcnow() - timedelta(days=TRASH_DAYS)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=TRASH_DAYS)
         old = (self.session.query(Password)
                .filter(
                    Password.user_id == user.id,
@@ -296,7 +296,7 @@ class DatabaseManager:
         encrypted  = crypto.encrypt(json_bytes.decode("utf-8"))
         export_obj = {
             "version":     "2.0",
-            "exported_at": datetime.utcnow().isoformat(),
+            "exported_at": datetime.now(timezone.utc).isoformat(),
             "username":    user.username,
             "count":       len(data),
             "data":        base64.b64encode(encrypted).decode("utf-8"),
