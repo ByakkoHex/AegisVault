@@ -1933,10 +1933,10 @@ class MainWindow(QMainWindow):
         dlg.setFixedSize(440, 300)
         dlg.setWindowFlags(
             Qt.WindowType.Dialog
-            | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.CustomizeWindowHint
             | Qt.WindowType.WindowTitleHint
             # Bez WindowCloseButtonHint → brak przycisku X
+            # Bez WindowStaysOnTopHint → nie wyskakuje nad inne aplikacje
         )
         dlg.reject = lambda: None  # blokuj Escape
         dlg.setStyleSheet("QDialog { background: #1e1e1e; color: #f0f0f0; } QLabel { background: transparent; border: none; color: #f0f0f0; }")
