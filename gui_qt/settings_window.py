@@ -39,7 +39,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QColor, QFont, QPixmap, QImage
 
 from database.db_manager import DatabaseManager
-from core.crypto import CryptoManager, hash_master_password, verify_master_password, generate_salt
+from core.crypto import CryptoManager, hash_master_password, verify_master_password, generate_salt, KDF_ARGON2ID
 from core.totp import TOTPManager
 from utils.prefs_manager import PrefsManager, THEMES
 import utils.windows_hello as wh
@@ -1335,18 +1335,43 @@ class SettingsPanel(QWidget):
             show_error("Błąd 2FA", "Nieprawidłowy kod 2FA!", parent=dialog)
             return
         try:
-            new_salt   = generate_salt()
-            new_crypto = CryptoManager(new_pwd, new_salt)
-            for entry in self.db.get_all_passwords(self.user):
-                pt = self.crypto.decrypt(entry.encrypted_password)
-                entry.encrypted_password = new_crypto.encrypt(pt)
-            self.user.master_password_hash = hash_master_password(new_pwd)
-            self.user.salt = new_salt
+            from database.models import Password, PasswordHistory
+            new_salt   = generate_salt(32)
+            new_crypto = CryptoManager(new_pwd, new_salt, kdf_version=KDF_ARGON2ID)
+
+            # Re-szyfruj wszystkie hasła (aktywne + kosz)
+            all_passwords = (self.db.session.query(Password)
+                             .filter_by(user_id=self.user.id).all())
+            for entry in all_passwords:
+                try:
+                    pt = self.crypto.decrypt(entry.encrypted_password)
+                    entry.encrypted_password = new_crypto.encrypt(pt)
+                except Exception:
+                    pass  # uszkodzony wpis — pomiń
+
+            # Re-szyfruj historię haseł
+            history_entries = (
+                self.db.session.query(PasswordHistory)
+                .join(Password)
+                .filter(Password.user_id == self.user.id)
+                .all()
+            )
+            for h in history_entries:
+                try:
+                    pt = self.crypto.decrypt(h.encrypted_password)
+                    h.encrypted_password = new_crypto.encrypt(pt)
+                except Exception:
+                    pass
+
+            self.user.master_password_hash = hash_master_password(new_pwd, version=KDF_ARGON2ID)
+            self.user.salt       = new_salt
+            self.user.kdf_version = KDF_ARGON2ID
             self.db.session.commit()
             self.crypto = new_crypto
             show_success("Sukces", "Hasło masterowe zostało zmienione.", parent=dialog)
             dialog.accept()
         except Exception as e:
+            self.db.session.rollback()
             show_error("Błąd", f"Wystąpił błąd:\n{e}", parent=dialog)
 
     # ══════════════════════════════════════════════════════════════════

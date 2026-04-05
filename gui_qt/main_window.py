@@ -310,13 +310,13 @@ class PasswordFormDialog(QDialog):
 
         # Pasek siły
         self._str_bar = QProgressBar()
-        self._str_bar.setRange(0, 4)
+        self._str_bar.setRange(0, 100)
         self._str_bar.setValue(0)
-        self._str_bar.setFixedHeight(5)
+        self._str_bar.setFixedHeight(6)
         self._str_bar.setTextVisible(False)
         self._str_bar.setStyleSheet(
             f"QProgressBar {{ background: {_bar_bg}; border-radius: 3px; border: none; }}"
-            "QProgressBar::chunk { background: #718096; border-radius: 3px; }"
+            "QProgressBar::chunk { background: #718096; }"
         )
         fl.addWidget(self._str_bar)
 
@@ -481,15 +481,15 @@ class PasswordFormDialog(QDialog):
             self._str_bar.setValue(0)
             self._str_lbl.setText("")
             return
-        sc = check_strength(pwd)
-        score = sc.get("score", 0)
-        label = sc.get("label", "")
-        color = sc.get("color", "#718096")
-        self._str_bar.setValue(score + 1)
+        sc      = check_strength(pwd)
+        percent = sc.get("percent", 0)
+        label   = sc.get("label", "")
+        color   = sc.get("color", "#718096")
         self._str_bar.setStyleSheet(
-            f"QProgressBar {{ background: #333; border-radius: 3px; border: none; }}"
-            f"QProgressBar::chunk {{ background: {color}; border-radius: 3px; }}"
+            f"QProgressBar {{ background: {'#3a3a3a'}; border-radius: 3px; border: none; }}"
+            f"QProgressBar::chunk {{ background: {color}; }}"
         )
+        self._str_bar.setValue(percent)
         self._str_lbl.setText(label)
         self._str_lbl.setStyleSheet(f"font-size: 11px; color: {color}; background: transparent; border: none;")
 
