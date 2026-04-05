@@ -582,11 +582,43 @@ class LoginWindow(QMainWindow):
         h2.setStyleSheet("font-size: 15px; font-weight: bold; margin-bottom: 4px;")
         s2l.addWidget(h2)
 
-        self._reset_totp_desc = QLabel("Podaj aktualny 6-cyfrowy kod\nz aplikacji authenticator.")
-        self._reset_totp_desc.setWordWrap(True)
-        self._reset_totp_desc.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 8px;")
-        s2l.addWidget(self._reset_totp_desc)
+        # Zakładki: TOTP | Klucz recovery
+        tab_row = QWidget()
+        tab_row.setStyleSheet("background: transparent;")
+        trl = QHBoxLayout(tab_row)
+        trl.setContentsMargins(0, 0, 0, 4)
+        trl.setSpacing(6)
+        self._reset_tab_totp = QPushButton("📱 Kod 2FA")
+        self._reset_tab_rec  = QPushButton("🔑 Klucz recovery")
+        for btn in (self._reset_tab_totp, self._reset_tab_rec):
+            btn.setFixedHeight(32)
+            btn.setCheckable(True)
+            btn.setStyleSheet(
+                f"QPushButton {{ background: transparent; color: #888; border: 1px solid #444; border-radius: 8px; font-size: 12px; }}"
+                f"QPushButton:checked {{ background: {self._accent}22; color: {self._accent}; border-color: {self._accent}; }}"
+            )
+        self._reset_tab_totp.setChecked(True)
+        self._reset_tab_totp.clicked.connect(lambda: self._switch_reset_tab("totp"))
+        self._reset_tab_rec.clicked.connect(lambda: self._switch_reset_tab("recovery"))
+        trl.addWidget(self._reset_tab_totp)
+        trl.addWidget(self._reset_tab_rec)
+        trl.addStretch()
+        s2l.addWidget(tab_row)
 
+        # Sub-stack: TOTP | Recovery
+        self._reset_verify_stack = QStackedWidget()
+        self._reset_verify_stack.setStyleSheet("background: transparent;")
+
+        # Sub-page 0: TOTP
+        totp_sub = QWidget()
+        totp_sub.setStyleSheet("background: transparent;")
+        tsub_l = QVBoxLayout(totp_sub)
+        tsub_l.setContentsMargins(0, 0, 0, 0)
+        tsub_l.setSpacing(4)
+        desc_totp = QLabel("Podaj aktualny 6-cyfrowy kod\nz aplikacji authenticator.")
+        desc_totp.setWordWrap(True)
+        desc_totp.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 4px;")
+        tsub_l.addWidget(desc_totp)
         self._reset_totp_e = QLineEdit()
         self._reset_totp_e.setPlaceholderText("000000")
         self._reset_totp_e.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -597,7 +629,33 @@ class LoginWindow(QMainWindow):
             "background: #252525; color: white; border: 1px solid #333;"
         )
         self._reset_totp_e.returnPressed.connect(self._on_reset_step2)
-        s2l.addWidget(self._reset_totp_e)
+        tsub_l.addWidget(self._reset_totp_e)
+        tsub_l.addStretch()
+
+        # Sub-page 1: Recovery key
+        rec_sub = QWidget()
+        rec_sub.setStyleSheet("background: transparent;")
+        rsub_l = QVBoxLayout(rec_sub)
+        rsub_l.setContentsMargins(0, 0, 0, 0)
+        rsub_l.setSpacing(4)
+        desc_rec = QLabel("Wpisz klucz recovery zapisany przy konfiguracji konta.\nFormat: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX")
+        desc_rec.setWordWrap(True)
+        desc_rec.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 4px;")
+        rsub_l.addWidget(desc_rec)
+        self._reset_rec_e = QLineEdit()
+        self._reset_rec_e.setPlaceholderText("XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX")
+        self._reset_rec_e.setFixedHeight(42)
+        self._reset_rec_e.setStyleSheet(
+            "font-size: 13px; border-radius: 8px; letter-spacing: 2px;"
+            "background: #252525; color: white; border: 1px solid #333; padding: 0 10px;"
+        )
+        self._reset_rec_e.returnPressed.connect(self._on_reset_step2)
+        rsub_l.addWidget(self._reset_rec_e)
+        rsub_l.addStretch()
+
+        self._reset_verify_stack.addWidget(totp_sub)
+        self._reset_verify_stack.addWidget(rec_sub)
+        s2l.addWidget(self._reset_verify_stack)
 
         self._reset_step2_err = QLabel("")
         self._reset_step2_err.setStyleSheet("color: #e53e3e; font-size: 11px;")
@@ -737,6 +795,18 @@ class LoginWindow(QMainWindow):
 
     # ── Reset masterhasła — logika kroków ────────────────────────────
 
+    def _switch_reset_tab(self, mode: str):
+        if mode == "totp":
+            self._reset_tab_totp.setChecked(True)
+            self._reset_tab_rec.setChecked(False)
+            self._reset_verify_stack.setCurrentIndex(0)
+            QTimer.singleShot(50, self._reset_totp_e.setFocus)
+        else:
+            self._reset_tab_totp.setChecked(False)
+            self._reset_tab_rec.setChecked(True)
+            self._reset_verify_stack.setCurrentIndex(1)
+            QTimer.singleShot(50, self._reset_rec_e.setFocus)
+
     def _on_reset_step1(self):
         username = self._reset_user_e.text().strip()
         if not username:
@@ -748,35 +818,66 @@ class LoginWindow(QMainWindow):
             self._reset_step1_err.setText("Nie znaleziono użytkownika.")
             self._reset_step1_err.setVisible(True)
             return
-        if not user.totp_secret:
+        has_totp     = bool(user.totp_secret)
+        has_recovery = self.db.has_recovery_key(user)
+        if not has_totp and not has_recovery:
             self._reset_step1_err.setText(
-                "Ten konto nie ma włączonego 2FA.\n"
-                "Reset hasła bez 2FA nie jest możliwy.\n"
-                "Skonfiguruj 2FA zanim zapomnisz hasła."
+                "To konto nie ma skonfigurowanego 2FA ani klucza recovery.\n"
+                "Reset hasła jest niemożliwy — skonfiguruj jedną z tych\n"
+                "metod weryfikacji zanim zapomnisz hasła."
             )
             self._reset_step1_err.setVisible(True)
             return
         self._reset_pending_user = user
         self._reset_step1_err.setVisible(False)
         self._reset_totp_e.clear()
+        self._reset_rec_e.clear()
         self._reset_step2_err.setVisible(False)
+        # Pokaż/ukryj zakładki zależnie od dostępnych metod
+        self._reset_tab_totp.setVisible(has_totp)
+        self._reset_tab_rec.setVisible(has_recovery)
+        if has_totp:
+            self._switch_reset_tab("totp")
+        else:
+            self._switch_reset_tab("recovery")
         self._reset_stack.setCurrentIndex(1)
-        QTimer.singleShot(50, self._reset_totp_e.setFocus)
 
     def _on_reset_step2(self):
-        code = self._reset_totp_e.text().strip()
-        if len(code) != 6 or not code.isdigit():
-            self._reset_step2_err.setText("Kod musi mieć dokładnie 6 cyfr.")
-            self._reset_step2_err.setVisible(True)
-            return
         user = self._reset_pending_user
-        if not TOTPManager(secret=user.totp_secret).verify(code):
-            self._reset_step2_err.setText("Nieprawidłowy kod 2FA.")
-            self._reset_step2_err.setVisible(True)
-            shake(self._reset_totp_e)
-            self._reset_totp_e.clear()
-            return
+        using_recovery = self._reset_verify_stack.currentIndex() == 1
+
+        if using_recovery:
+            phrase = self._reset_rec_e.text().strip()
+            if not phrase:
+                self._reset_step2_err.setText("Wpisz klucz recovery.")
+                self._reset_step2_err.setVisible(True)
+                return
+            from utils.recovery import decrypt_with_recovery
+            old_master = decrypt_with_recovery(
+                user.recovery_encrypted_master, phrase, user.recovery_salt
+            )
+            if old_master is None:
+                self._reset_step2_err.setText("Nieprawidłowy klucz recovery.")
+                self._reset_step2_err.setVisible(True)
+                shake(self._reset_rec_e)
+                return
+            self._reset_verified_phrase = phrase
+        else:
+            code = self._reset_totp_e.text().strip()
+            if len(code) != 6 or not code.isdigit():
+                self._reset_step2_err.setText("Kod musi mieć dokładnie 6 cyfr.")
+                self._reset_step2_err.setVisible(True)
+                return
+            if not TOTPManager(secret=user.totp_secret).verify(code):
+                self._reset_step2_err.setText("Nieprawidłowy kod 2FA.")
+                self._reset_step2_err.setVisible(True)
+                shake(self._reset_totp_e)
+                self._reset_totp_e.clear()
+                return
+            self._reset_verified_phrase = None
+
         self._reset_step2_err.setVisible(False)
+        self._reset_using_recovery = using_recovery
         self._reset_pwd1_e.clear()
         self._reset_pwd2_e.clear()
         self._reset_step3_err.setVisible(False)
@@ -797,52 +898,55 @@ class LoginWindow(QMainWindow):
             return
         self._reset_btn.setEnabled(False)
         self._reset_btn.setText("Zmieniam hasło…")
-        user = self._reset_pending_user
+        user            = self._reset_pending_user
+        using_recovery  = getattr(self, "_reset_using_recovery", False)
+        phrase          = getattr(self, "_reset_verified_phrase", None)
 
         def _do_reset():
             try:
-                # Musimy zbudować stary CryptoManager — ale nie znamy starego hasła.
-                # Tworzymy "pusty" klucz do re-szyfrowania: odszyfrowanie istniejących
-                # wpisów NIE jest możliwe bez starego hasła — dane zostaną wyczyszczone.
-                from database.models import Password, PasswordHistory
-                from core.crypto import generate_salt, hash_master_password, KDF_ARGON2ID
-
-                new_salt   = generate_salt(32)
-                new_crypto = CryptoManager(pwd1, new_salt, kdf_version=KDF_ARGON2ID)
-
-                # Usuń wszystkie zaszyfrowane hasła i historię
-                # (nie możemy re-szyfrować bez starego klucza)
-                self.db.session.query(PasswordHistory).filter(
-                    PasswordHistory.password_id.in_(
-                        self.db.session.query(Password.id).filter_by(user_id=user.id)
-                    )
-                ).delete(synchronize_session=False)
-                self.db.session.query(Password).filter_by(user_id=user.id).delete()
-
-                user.master_password_hash = hash_master_password(pwd1, version=KDF_ARGON2ID)
-                user.salt                 = new_salt
-                user.kdf_version          = KDF_ARGON2ID
-                self.db.session.commit()
+                if using_recovery and phrase:
+                    # Recovery: mamy stare masterhasło → pełne re-szyfrowanie
+                    new_crypto = self.db.reset_with_recovery_key(user, phrase, pwd1)
+                    data_kept  = True
+                else:
+                    # TOTP: nie mamy starego klucza → usuwamy wpisy
+                    from database.models import Password, PasswordHistory
+                    from core.crypto import generate_salt, hash_master_password, KDF_ARGON2ID
+                    new_salt   = generate_salt(32)
+                    new_crypto = CryptoManager(pwd1, new_salt, kdf_version=KDF_ARGON2ID)
+                    self.db.session.query(PasswordHistory).filter(
+                        PasswordHistory.password_id.in_(
+                            self.db.session.query(Password.id).filter_by(user_id=user.id)
+                        )
+                    ).delete(synchronize_session=False)
+                    self.db.session.query(Password).filter_by(user_id=user.id).delete()
+                    user.master_password_hash      = hash_master_password(pwd1, version=KDF_ARGON2ID)
+                    user.salt                      = new_salt
+                    user.kdf_version               = KDF_ARGON2ID
+                    user.recovery_salt             = None
+                    user.recovery_encrypted_master = None
+                    self.db.session.commit()
+                    data_kept = False
 
                 self.crypto      = new_crypto
                 self.logged_user = user
-                QTimer.singleShot(0, self._after_reset_success)
+                QTimer.singleShot(0, lambda: self._after_reset_success(data_kept))
             except Exception as e:
                 self.db.session.rollback()
                 QTimer.singleShot(0, lambda: self._after_reset_error(str(e)))
 
         threading.Thread(target=_do_reset, daemon=True).start()
 
-    def _after_reset_success(self):
+    def _after_reset_success(self, data_kept: bool):
         self._reset_btn.setEnabled(True)
         self._reset_btn.setText("Zmień hasło i zaloguj")
-        show_success(
-            "Hasło zmienione",
-            "Hasło masterowe zostało zmienione.\n\n"
-            "⚠️ Istniejące hasła zostały usunięte — niemożliwe było\n"
-            "ich re-szyfrowanie bez znajomości starego hasła.",
-            parent=self
-        )
+        if data_kept:
+            msg = "Hasło masterowe zostało zmienione.\nWszystkie hasła zostały zachowane i re-zaszyfrowane."
+        else:
+            msg = ("Hasło masterowe zostało zmienione.\n\n"
+                   "⚠️ Istniejące hasła zostały usunięte — niemożliwe było\n"
+                   "ich re-szyfrowanie bez klucza recovery.")
+        show_success("Hasło zmienione", msg, parent=self)
         self._complete_login(self.logged_user, self._reset_pwd1_e.text())
 
     def _after_reset_error(self, msg: str):

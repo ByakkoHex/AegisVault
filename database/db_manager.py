@@ -399,6 +399,49 @@ class DatabaseManager:
 
         return imported, skipped
 
+    # ──────────────────────────────────────────────
+    # KLUCZ RECOVERY
+    # ──────────────────────────────────────────────
+
+    def setup_recovery_key(self, user, master_password: str) -> str:
+        """
+        Generuje klucz recovery, szyfruje masterhasło, zapisuje w DB.
+        Zwraca phrase do wyświetlenia użytkownikowi (jedyny raz).
+        """
+        from utils.recovery import generate_recovery_key, generate_recovery_salt, encrypt_with_recovery
+        phrase    = generate_recovery_key()
+        salt      = generate_recovery_salt()
+        encrypted = encrypt_with_recovery(master_password, phrase, salt)
+        user.recovery_salt             = salt
+        user.recovery_encrypted_master = encrypted
+        self.session.commit()
+        return phrase
+
+    def has_recovery_key(self, user) -> bool:
+        return bool(user.recovery_salt and user.recovery_encrypted_master)
+
+    def clear_recovery_key(self, user) -> None:
+        user.recovery_salt             = None
+        user.recovery_encrypted_master = None
+        self.session.commit()
+
+    def reset_with_recovery_key(self, user, phrase: str, new_password: str) -> "CryptoManager":
+        """
+        Weryfikuje klucz recovery, re-szyfruje wszystkie dane nowym hasłem.
+        Rzuca ValueError jeśli klucz nieprawidłowy lub recovery nie skonfigurowane.
+        """
+        from utils.recovery import decrypt_with_recovery
+        if not self.has_recovery_key(user):
+            raise ValueError("Klucz recovery nie jest skonfigurowany dla tego konta.")
+        old_master = decrypt_with_recovery(
+            user.recovery_encrypted_master, phrase, user.recovery_salt
+        )
+        if old_master is None:
+            raise ValueError("Nieprawidłowy klucz recovery.")
+        kdf_v      = user.kdf_version if user.kdf_version is not None else KDF_PBKDF2
+        old_crypto = CryptoManager(old_master, user.salt, kdf_version=kdf_v)
+        return self.change_master_password(user, old_crypto, new_password)
+
     def change_master_password(self, user: "User", old_crypto: "CryptoManager",
                                new_password: str) -> "CryptoManager":
         """
@@ -434,9 +477,12 @@ class DatabaseManager:
                 except Exception:
                     pass
 
-            user.master_password_hash = hash_master_password(new_password, version=KDF_ARGON2ID)
-            user.salt                 = new_salt
-            user.kdf_version          = KDF_ARGON2ID
+            user.master_password_hash      = hash_master_password(new_password, version=KDF_ARGON2ID)
+            user.salt                      = new_salt
+            user.kdf_version               = KDF_ARGON2ID
+            # Recovery key przechowuje stare masterhasło — po zmianie jest nieaktualne
+            user.recovery_salt             = None
+            user.recovery_encrypted_master = None
             self.session.commit()
             return new_crypto
 

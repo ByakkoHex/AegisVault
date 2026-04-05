@@ -837,6 +837,20 @@ class SettingsPanel(QWidget):
         self._action_btn(card_pwd, "Zmień hasło masterowe",
                          self._show_reset_password, "#1f6aa5", "#1a5a94")
 
+        # ── Klucz recovery ────────────────────────────────────────────
+        card_rec = self._card(vl, "Klucz recovery", dark)
+        has_rec = self.db.has_recovery_key(self.user)
+        rec_status = "✅ Skonfigurowany" if has_rec else "⚠️ Nie skonfigurowany"
+        rec_desc   = ("Klucz recovery umożliwia reset hasła masterowego bez dostępu do\n"
+                      "telefonu z 2FA — jedyna metoda pozwalająca zachować wszystkie hasła.")
+        self._row(card_rec, rec_status, rec_desc, dark)
+        self._rec_setup_btn = self._action_btn(
+            card_rec,
+            "Regeneruj klucz recovery" if has_rec else "Skonfiguruj klucz recovery",
+            self._show_setup_recovery,
+            "#2d6a4f", "#40916c",
+        )
+
         # ── Reset 2FA ─────────────────────────────────────────────────
         card_2fa = self._card(vl, "Uwierzytelnianie dwuetapowe", dark)
         self._row(card_2fa, "Wygeneruj nowy kod QR",
@@ -1495,6 +1509,120 @@ class SettingsPanel(QWidget):
         sv.clicked.connect(save_qr)
         entry_code.returnPressed.connect(save_qr)
 
+        dialog.exec()
+
+    # ══════════════════════════════════════════════════════════════════
+    # LOGIKA — KLUCZ RECOVERY
+    # ══════════════════════════════════════════════════════════════════
+
+    def _show_setup_recovery(self) -> None:
+        """Dialog: weryfikacja hasłem → wyświetl/odśwież klucz recovery."""
+        dialog = self._make_dialog("Klucz recovery", 460, 400)
+        vl = QVBoxLayout(dialog)
+        vl.setContentsMargins(20, 20, 20, 20)
+        vl.setSpacing(10)
+
+        _p   = PrefsManager()
+        dark = (_p.get("appearance_mode") or "dark").lower() != "light"
+        acc  = _p.get_accent()
+
+        stack = QStackedWidget()
+        stack.setStyleSheet("background: transparent;")
+        vl.addWidget(stack)
+
+        # ── Krok 1: weryfikacja hasłem ─────────────────────────────────
+        step1 = QWidget()
+        step1.setStyleSheet("background: transparent;")
+        s1l = QVBoxLayout(step1)
+        s1l.setSpacing(8)
+
+        title1 = QLabel("Weryfikacja tożsamości")
+        title1.setStyleSheet("font-size: 16px; font-weight: bold;")
+        s1l.addWidget(title1)
+
+        desc1 = QLabel("Podaj hasło masterowe, aby wyświetlić klucz recovery.\nKlucz zostanie wygenerowany lub zastąpiony nowym.")
+        desc1.setWordWrap(True)
+        desc1.setStyleSheet("color: #888; font-size: 12px;")
+        s1l.addWidget(desc1)
+
+        err1 = QLabel("")
+        err1.setStyleSheet("color: #e53e3e; font-size: 11px;")
+        err1.setVisible(False)
+        s1l.addWidget(err1)
+
+        pwd_e = QLineEdit()
+        pwd_e.setPlaceholderText("Hasło masterowe...")
+        pwd_e.setEchoMode(QLineEdit.EchoMode.Password)
+        pwd_e.setFixedHeight(40)
+        s1l.addWidget(pwd_e)
+        s1l.addStretch()
+
+        btn1 = QPushButton("Generuj klucz recovery →")
+        btn1.setFixedHeight(40)
+        btn1.setStyleSheet(f"background: {acc}; color: white; border-radius: 10px; font-size: 13px; font-weight: bold;")
+        s1l.addWidget(btn1)
+
+        # ── Krok 2: wyświetl klucz ─────────────────────────────────────
+        step2 = QWidget()
+        step2.setStyleSheet("background: transparent;")
+        s2l = QVBoxLayout(step2)
+        s2l.setSpacing(10)
+
+        title2 = QLabel("Twój klucz recovery")
+        title2.setStyleSheet("font-size: 16px; font-weight: bold;")
+        s2l.addWidget(title2)
+
+        warn = QLabel("⚠️  Zapisz ten klucz w bezpiecznym miejscu.\nNie zostanie pokazany ponownie.")
+        warn.setWordWrap(True)
+        warn.setStyleSheet("color: #f0a500; font-size: 12px; font-weight: bold;")
+        s2l.addWidget(warn)
+
+        self._rec_key_lbl = QLabel("")
+        self._rec_key_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._rec_key_lbl.setStyleSheet(
+            "font-size: 16px; font-weight: bold; letter-spacing: 3px; "
+            f"background: {'#1a2a1a' if dark else '#e8f5e9'}; color: {'#7ec87e' if dark else '#2e7d32'}; "
+            "border-radius: 10px; padding: 16px 12px; border: none;"
+        )
+        self._rec_key_lbl.setWordWrap(True)
+        s2l.addWidget(self._rec_key_lbl)
+
+        copy_btn = QPushButton("📋  Kopiuj klucz")
+        copy_btn.setFixedHeight(36)
+        copy_btn.setStyleSheet(
+            f"background: {'#2a2a2a' if dark else '#e0e0e0'}; color: {'#ccc' if dark else '#333'}; "
+            "border-radius: 8px; font-size: 12px;"
+        )
+        copy_btn.clicked.connect(lambda: __import__("pyperclip").copy(self._rec_key_lbl.text()))
+        s2l.addWidget(copy_btn)
+
+        done_btn = QPushButton("Zapisałem klucz — Zamknij")
+        done_btn.setFixedHeight(40)
+        done_btn.setStyleSheet(f"background: {acc}; color: white; border-radius: 10px; font-size: 13px; font-weight: bold;")
+        done_btn.clicked.connect(dialog.accept)
+        s2l.addWidget(done_btn)
+        s2l.addStretch()
+
+        stack.addWidget(step1)
+        stack.addWidget(step2)
+
+        def _go():
+            pwd = pwd_e.text()
+            if not verify_master_password(pwd, self.user.master_password_hash,
+                                          version=self.user.kdf_version or 0):
+                err1.setText("Nieprawidłowe hasło masterowe.")
+                err1.setVisible(True)
+                return
+            phrase = self.db.setup_recovery_key(self.user, pwd)
+            self._rec_key_lbl.setText(phrase)
+            # Odśwież przycisk w karcie ustawień
+            if hasattr(self, "_rec_setup_btn"):
+                self._rec_setup_btn.setText("Regeneruj klucz recovery")
+            stack.setCurrentIndex(1)
+
+        btn1.clicked.connect(_go)
+        pwd_e.returnPressed.connect(_go)
+        QTimer.singleShot(50, pwd_e.setFocus)
         dialog.exec()
 
     # ══════════════════════════════════════════════════════════════════

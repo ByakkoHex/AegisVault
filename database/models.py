@@ -28,9 +28,11 @@ class User(Base):
     username             = Column(String(64), unique=True, nullable=False)
     master_password_hash = Column(LargeBinary, nullable=False)
     salt                 = Column(LargeBinary, nullable=False)
-    totp_secret          = Column(String(32), nullable=True)
-    kdf_version          = Column(Integer, default=0, nullable=False, server_default="0")
-    created_at           = Column(DateTime, default=datetime.utcnow)
+    totp_secret                = Column(String(32), nullable=True)
+    kdf_version                = Column(Integer, default=0, nullable=False, server_default="0")
+    recovery_salt              = Column(LargeBinary, nullable=True)   # sól do Argon2id recovery
+    recovery_encrypted_master  = Column(LargeBinary, nullable=True)   # masterhasło zaszyfrowane kluczem recovery
+    created_at                 = Column(DateTime, default=datetime.utcnow)
 
     passwords         = relationship("Password", back_populates="user", cascade="all, delete-orphan")
     custom_categories = relationship("CustomCategory", back_populates="user", cascade="all, delete-orphan")
@@ -158,6 +160,12 @@ def init_db(db_path: str = "password_manager.db") -> object:
         user_cols = [c["name"] for c in inspector.get_columns("users")]
         if "kdf_version" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN kdf_version INTEGER NOT NULL DEFAULT 0"))
+
+        # Migracja users — klucz recovery
+        if "recovery_salt" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN recovery_salt BLOB"))
+        if "recovery_encrypted_master" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN recovery_encrypted_master BLOB"))
 
         # Migracja custom_categories.icon
         cc_cols = [c["name"] for c in inspector.get_columns("custom_categories")]
