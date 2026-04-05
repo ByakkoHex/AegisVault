@@ -116,15 +116,22 @@ class DatabaseManager:
 
     def get_all_passwords(self, user) -> list[Password]:
         return (self.session.query(Password)
-                .filter_by(user_id=user.id, is_deleted=0).all())
+                .filter_by(user_id=user.id, is_deleted=0, entry_type="password").all())
+
+    def get_all_notes(self, user) -> list[Password]:
+        return (self.session.query(Password)
+                .filter_by(user_id=user.id, is_deleted=0, entry_type="note").all())
 
     def get_passwords_by_category(self, user, category: str) -> list[Password]:
+        if category == "Notatki":
+            return self.get_all_notes(user)
         if category == "Wszystkie":
             return self.get_all_passwords(user)
         if category == "Wygasające":
             return self.get_expiring_passwords(user)
         return (self.session.query(Password)
-                .filter_by(user_id=user.id, category=category, is_deleted=0).all())
+                .filter_by(user_id=user.id, category=category,
+                           is_deleted=0, entry_type="password").all())
 
     def search_passwords(self, user, query: str, category: str = "Wszystkie") -> list[Password]:
         q = (self.session.query(Password)
@@ -168,6 +175,28 @@ class DatabaseManager:
     # HASŁA — ZAPIS / EDYCJA
     # ──────────────────────────────────────────────
 
+    def add_note(self, user, title: str, content: str) -> Password:
+        """Dodaje zaszyfrowaną notatkę (entry_type='note')."""
+        entry = Password(
+            user_id=user.id,
+            title=title,
+            username=None,
+            encrypted_password=b"",   # notatki nie mają hasła
+            notes=content,
+            category="Notatki",
+            entry_type="note",
+        )
+        self.session.add(entry)
+        self.session.commit()
+        return entry
+
+    def update_note(self, entry: Password, title: str, content: str) -> Password:
+        entry.title      = title
+        entry.notes      = content
+        entry.updated_at = datetime.now(timezone.utc)
+        self.session.commit()
+        return entry
+
     def add_password(self, user, crypto, title, username, plaintext_password,
                      url="", notes="", category="Inne", expires_at=None,
                      otp_secret=None) -> Password:
@@ -181,6 +210,7 @@ class DatabaseManager:
             category=category,
             expires_at=expires_at,
             otp_secret=otp_secret or None,
+            entry_type="password",
         )
         self.session.add(entry)
         self.session.commit()

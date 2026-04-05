@@ -77,6 +77,7 @@ CATEGORIES = {
     "Rozrywka":     {"icon": "🎮", "color": "#805AD5"},
     "Inne":         {"icon": "📁", "color": "#718096"},
     "Wygasające":   {"icon": "⏰", "color": None},
+    "Notatki":      {"icon": "📝", "color": "#5a67d8"},
 }
 
 _EMOJI_PICKER = [
@@ -577,6 +578,140 @@ class PasswordFormDialog(QDialog):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# NoteFormDialog — dodawanie / edycja zaszyfrowanej notatki
+# ══════════════════════════════════════════════════════════════════════
+
+class NoteFormDialog(QDialog):
+    def __init__(self, parent, db, user, entry=None):
+        super().__init__(parent)
+        self.db     = db
+        self.user   = user
+        self.entry  = entry
+        self.result = False
+
+        self.setWindowTitle("Edytuj notatkę" if entry else "Nowa notatka")
+        self.setFixedWidth(460)
+        self.setMinimumHeight(400)
+
+        _p    = PrefsManager()
+        accent = _p.get_accent()
+        dark   = (_p.get("appearance_mode") or "dark").lower() != "light"
+
+        bg_rgba  = "rgba(18,18,18,0.92)" if dark else "rgba(240,240,240,0.92)"
+        bg_input = "#2e2e2e" if dark else "#ffffff"
+        bdr      = "#525252" if dark else "#c0c0c0"
+        text_col = "#f0f0f0" if dark else "#1a1a1a"
+        lbl_col  = "#aaaaaa" if dark else "#555555"
+
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setStyleSheet(f"""
+            QDialog {{ background: {bg_rgba}; color: {text_col}; border-radius: 14px; }}
+            QLabel  {{ color: {text_col}; font-size: 13px; background: transparent; border: none; }}
+            QLineEdit, QTextEdit {{
+                background: {bg_input}; color: {text_col};
+                border: 1.5px solid {bdr}; border-radius: 8px;
+                padding: 8px 12px; font-size: 13px;
+            }}
+            QLineEdit:focus, QTextEdit:focus {{ border-color: {accent}; border-width: 2px; }}
+        """)
+
+        vl = QVBoxLayout(self)
+        vl.setContentsMargins(20, 16, 20, 16)
+        vl.setSpacing(8)
+
+        title_lbl = QLabel("Edytuj notatkę" if entry else "Nowa notatka")
+        title_lbl.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {text_col};")
+        vl.addWidget(title_lbl)
+
+        sep = AnimatedGradientWidget(accent=accent, base="#161616" if dark else "#f2f2f2",
+                                     direction="h", anim_mode="slide")
+        sep.setFixedHeight(2)
+        sep.start_animation()
+        vl.addWidget(sep)
+
+        # Tytuł
+        lbl_t = QLabel("TYTUŁ")
+        lbl_t.setStyleSheet(f"color: {lbl_col}; font-size: 11px; font-weight: 600;")
+        vl.addWidget(lbl_t)
+        self._title_e = QLineEdit()
+        self._title_e.setPlaceholderText("Tytuł notatki...")
+        self._title_e.setFixedHeight(40)
+        self._title_e.setStyleSheet(
+            f"background: {bg_input}; color: {text_col}; "
+            f"border: 1.5px solid {bdr}; border-radius: 8px; padding: 8px 12px; font-size: 13px;"
+        )
+        vl.addWidget(self._title_e)
+
+        # Treść
+        lbl_c = QLabel("TREŚĆ")
+        lbl_c.setStyleSheet(f"color: {lbl_col}; font-size: 11px; font-weight: 600;")
+        vl.addWidget(lbl_c)
+        self._content_e = QTextEdit()
+        self._content_e.setPlaceholderText("Zawartość notatki...")
+        self._content_e.setMinimumHeight(180)
+        self._content_e.setStyleSheet(
+            f"background: {bg_input}; color: {text_col}; "
+            f"border: 1.5px solid {bdr}; border-radius: 8px; padding: 8px 10px; font-size: 13px;"
+        )
+        vl.addWidget(self._content_e, stretch=1)
+
+        # Przyciski
+        btn_row = QWidget()
+        brl = QHBoxLayout(btn_row)
+        brl.setContentsMargins(0, 4, 0, 0)
+        cancel = QPushButton("Anuluj")
+        cancel.setFixedHeight(42)
+        cancel.setStyleSheet(
+            f"background: transparent; border: 1.5px solid {bdr}; "
+            f"color: {lbl_col}; border-radius: 10px; font-size: 13px;"
+        )
+        cancel.clicked.connect(self.reject)
+        brl.addWidget(cancel)
+        save_btn = QPushButton("Zapisz")
+        save_btn.setFixedHeight(42)
+        save_btn.setStyleSheet(
+            f"background: {accent}; color: white; border-radius: 10px; "
+            "font-size: 13px; font-weight: bold;"
+        )
+        save_btn.clicked.connect(self._save)
+        brl.addWidget(save_btn)
+        vl.addWidget(btn_row)
+
+        # Wypełnij przy edycji
+        if entry:
+            self._title_e.setText(entry.title or "")
+            self._content_e.setPlainText(entry.notes or "")
+
+        self._hex = HexBackground(self, hex_size=32, glow_max=2, glow_interval_ms=2000)
+        self._hex.setGeometry(0, 0, self.width(), self.height())
+        self._hex.lower()
+        QTimer.singleShot(0, lambda: self._hex and (
+            self._hex.setGeometry(0, 0, self.width(), self.height()),
+            self._hex.lower()
+        ))
+        QTimer.singleShot(200, self._title_e.setFocus)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_hex"):
+            self._hex.setGeometry(0, 0, self.width(), self.height())
+            self._hex.lower()
+
+    def _save(self):
+        title   = self._title_e.text().strip()
+        content = self._content_e.toPlainText().strip()
+        if not title:
+            show_error("Błąd", "Tytuł notatki jest wymagany!", parent=self)
+            return
+        if self.entry:
+            self.db.update_note(self.entry, title, content)
+        else:
+            self.db.add_note(self.user, title, content)
+        self.result = True
+        self.accept()
+
+
+# ══════════════════════════════════════════════════════════════════════
 # CategoryDialog — nowa kategoria (emoji + kolor)
 # ══════════════════════════════════════════════════════════════════════
 
@@ -917,6 +1052,9 @@ class PasswordRowWidget(QFrame):
         self._build()
 
     def _build(self):
+        if getattr(self.entry, "entry_type", "password") == "note":
+            self._build_note()
+            return
         entry   = self.entry
         accent  = self._accent
         compact = self.compact
@@ -1065,6 +1203,20 @@ class PasswordRowWidget(QFrame):
         if not compact:
             _action_btn("", "⌨ Auto-type", _bg_green, _fg_green, self._autotype, "Auto-type")
 
+        # ── Otwórz URL (tylko gdy wpis ma URL) ───────────────────────
+        if getattr(entry, "url", None):
+            url_btn = QPushButton("🌐")
+            url_btn.setFixedSize(36, btn_h)
+            url_btn.setStyleSheet(
+                f"QPushButton {{ background: transparent; color: {'#7ab8f5' if self._dark else '#1a5080'};"
+                f" border: 1px solid {'#444' if self._dark else '#ccc'}; border-radius: 6px;"
+                f" font-size: 15px; padding: 0; min-height: 0; min-width: 0; }}"
+                f"QPushButton:hover {{ border-color: {self._accent}; }}"
+            )
+            url_btn.setToolTip(f"Otwórz: {entry.url}")
+            url_btn.clicked.connect(self._open_url)
+            brl.addWidget(url_btn)
+
         # ── OTP (tylko gdy wpis ma sekret) ───────────────────────────
         if getattr(entry, "otp_secret", None):
             self._otp_btn = QPushButton("🔑 ···")
@@ -1099,6 +1251,13 @@ class PasswordRowWidget(QFrame):
 
         rl.addWidget(btns)
 
+    def _open_url(self):
+        url = self.entry.url or ""
+        if url and not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        if url:
+            webbrowser.open(url)
+
     def _refresh_otp_btn(self):
         """Aktualizuje przycisk OTP — kod + pozostałe sekundy."""
         try:
@@ -1119,6 +1278,97 @@ class PasswordRowWidget(QFrame):
                 self.on_copy(f"{self.entry.title} (OTP)")
         except Exception:
             pass
+
+    def _build_note(self):
+        """Wariant wiersza dla zaszyfrowanej notatki."""
+        entry = self.entry
+        self.setFixedHeight(56 if not self.compact else 44)
+
+        rl = QHBoxLayout(self)
+        rl.setContentsMargins(6, 6, 8, 6)
+        rl.setSpacing(0)
+
+        # Pasek koloru (fiolet notatek)
+        bar = QFrame()
+        bar.setFixedWidth(4)
+        bar.setStyleSheet("background: #5a67d8; border-radius: 2px; margin: 6px 0;")
+        rl.addWidget(bar)
+        rl.addSpacing(6)
+
+        # Avatar
+        av_size = 30 if self.compact else 38
+        avatar = QLabel("📝")
+        avatar.setFixedSize(av_size, av_size)
+        avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        avatar.setStyleSheet(
+            "background: #3c3d7a; border-radius: {}px; font-size: {}px; border: none;".format(
+                av_size // 2 - 2, av_size // 2 - 2
+            )
+        )
+        rl.addWidget(avatar)
+        rl.addSpacing(10)
+
+        # Info
+        info = QWidget()
+        info.setStyleSheet("background: transparent; border: none;")
+        il = QVBoxLayout(info)
+        il.setContentsMargins(0, 0, 0, 0)
+        il.setSpacing(2)
+
+        _text_col = "#f0f0f0" if self._dark else "#1a1a1a"
+        t = QLabel(entry.title or "—")
+        t.setStyleSheet(f"font-size: {'12px' if self.compact else '13px'}; font-weight: bold; color: {_text_col}; background: transparent; border: none;")
+        il.addWidget(t)
+
+        if not self.compact and entry.notes:
+            preview = entry.notes[:80].replace("\n", " ")
+            if len(entry.notes) > 80:
+                preview += "…"
+            sub = QLabel(preview)
+            sub.setStyleSheet("font-size: 11px; color: #888; background: transparent; border: none;")
+            il.addWidget(sub)
+
+        rl.addWidget(info, stretch=1)
+
+        # Przyciski: tylko Edytuj + Kosz
+        btns = QWidget()
+        btns.setStyleSheet("background: transparent; border: none;")
+        brl = QHBoxLayout(btns)
+        brl.setContentsMargins(0, 0, 0, 0)
+        brl.setSpacing(4)
+        btn_h = 30 if self.compact else 36
+        btn_w = 46 if self.compact else 100
+
+        _bg_edit = "#2a2a2a" if self._dark else "#e8e8e8"
+        _fg_edit = "#cccccc" if self._dark else "#444444"
+        for txt_c, txt_f, bg, fg, cb, tip in [
+            ("✎", "✎ Edytuj", _bg_edit, _fg_edit, self._edit_note, "Edytuj notatkę"),
+            ("🗑", "🗑 Kosz", "#3a1a1a" if self._dark else "#fde8e8",
+             "#ff7070" if self._dark else "#c0392b", self._trash, "Przenieś do kosza"),
+        ]:
+            b = QPushButton(txt_c if self.compact else txt_f)
+            b.setFixedSize(btn_w, btn_h)
+            b.setStyleSheet(
+                f"QPushButton {{ background: {bg}; color: {fg}; border: none; border-radius: 6px;"
+                f" font-size: {'11px' if self.compact else '12px'}; font-weight: 500;"
+                f" padding: 0 {'6px' if self.compact else '10px'}; min-height: 0; min-width: 0; }}"
+            )
+            b.setToolTip(tip)
+            b.clicked.connect(cb)
+            brl.addWidget(b)
+
+        rl.addWidget(btns)
+
+    def _edit_note(self):
+        dlg = NoteFormDialog(self.window(), self.db, self.on_refresh.__self__.user
+                             if hasattr(self.on_refresh, "__self__") else None,
+                             self.entry)
+        # Pobierz user z MainWindow
+        win = self.window()
+        if hasattr(win, "user"):
+            dlg.user = win.user
+        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.result:
+            self.on_refresh()
 
     def _copy(self):
         try:
@@ -1479,12 +1729,12 @@ class MainWindow(QMainWindow):
         self._view_btn.clicked.connect(self._toggle_compact)
         toll.addWidget(self._view_btn)
 
-        # Dodaj hasło
-        add_btn = QPushButton("+ Dodaj")
-        add_btn.setFixedHeight(32)
-        add_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 0 12px; border: none;")
-        add_btn.clicked.connect(self._add_password)
-        toll.addWidget(add_btn)
+        # Dodaj hasło / notatkę (zależnie od aktywnej kategorii)
+        self._add_btn = QPushButton("+ Dodaj")
+        self._add_btn.setFixedHeight(32)
+        self._add_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 0 12px; border: none;")
+        self._add_btn.clicked.connect(self._add_smart)
+        toll.addWidget(self._add_btn)
 
         cl.addWidget(toolbar)
 
@@ -1566,6 +1816,13 @@ class MainWindow(QMainWindow):
 
         # SPECJALNE
         self._cat_section_label(vl, "SPECJALNE", dark)
+
+        notes_count = len(self.db.get_all_notes(self.user))
+        notes_txt   = f"📝 Notatki" + (f"  ({notes_count})" if notes_count else "")
+        notes_btn   = self._sidebar_btn(notes_txt, "#5a67d8" if notes_count else "#888", dark)
+        notes_btn.clicked.connect(lambda: self._filter_category("Notatki"))
+        vl.addWidget(notes_btn)
+
         exp_count = len(self.db.get_expiring_passwords(self.user))
         exp_txt   = f"⏰ Wygasające" + (f"  ({exp_count})" if exp_count else "")
         exp_btn   = self._sidebar_btn(exp_txt, "#f0a500" if exp_count else "#888", dark)
@@ -1802,6 +2059,22 @@ class MainWindow(QMainWindow):
             self._breadcrumb_sep.setVisible(True)
             self._breadcrumb_lbl.setVisible(True)
 
+        # Zmień label przycisku dodawania
+        if hasattr(self, "_add_btn"):
+            if cat == "Notatki":
+                self._add_btn.setText("+ Notatka")
+                self._add_btn.setStyleSheet(
+                    "background: #5a67d8; color: white; border-radius: 8px; "
+                    "font-size: 12px; font-weight: bold; padding: 0 12px; border: none;"
+                )
+            else:
+                accent = self._prefs.get_accent()
+                self._add_btn.setText("+ Dodaj")
+                self._add_btn.setStyleSheet(
+                    f"background: {accent}; color: white; border-radius: 8px; "
+                    "font-size: 12px; font-weight: bold; padding: 0 12px; border: none;"
+                )
+
         self._load_passwords()
 
     # ── Load passwords ────────────────────────────────────────────────
@@ -1819,8 +2092,12 @@ class MainWindow(QMainWindow):
         else:
             entries = self.db.get_passwords_by_category(self.user, self._active_category)
 
-        count = len(entries)
-        pl = "hasło" if count == 1 else "haseł"
+        count    = len(entries)
+        is_notes = (self._active_category == "Notatki")
+        if is_notes:
+            pl = "notatka" if count == 1 else "notatek"
+        else:
+            pl = "hasło" if count == 1 else "haseł"
         self._count_lbl.setText(f"{count} {pl}")
 
         if not entries:
@@ -1838,18 +2115,29 @@ class MainWindow(QMainWindow):
                 el.addWidget(self._empty_lbl("Brak wyników", 15, dark))
                 el.addWidget(self._empty_lbl(f'Nic nie pasuje do „{query}"', 12, dark, muted=True))
             else:
-                icon_lbl = QLabel("📂" if self._active_category != "Wszystkie" else "🔐")
+                is_notes_empty = (self._active_category == "Notatki")
+                icon_lbl = QLabel("📝" if is_notes_empty else ("📂" if self._active_category != "Wszystkie" else "🔐"))
                 icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 icon_lbl.setStyleSheet("font-size: 40px; background: transparent; border: none;")
                 el.addWidget(icon_lbl)
-                el.addWidget(self._empty_lbl("Brak haseł", 15, dark))
-                el.addWidget(self._empty_lbl("Nie masz jeszcze żadnych zapisanych haseł.", 12, dark, muted=True))
-                add_e = QPushButton("+ Dodaj pierwsze hasło")
-                add_e.setFixedHeight(42)
-                add_e.setFixedWidth(220)
-                add_e.setStyleSheet(f"background: {accent}; color: white; border-radius: 10px; font-size: 13px; font-weight: bold; border: none;")
-                add_e.clicked.connect(self._add_password)
-                el.addWidget(add_e, alignment=Qt.AlignmentFlag.AlignCenter)
+                if is_notes_empty:
+                    el.addWidget(self._empty_lbl("Brak notatek", 15, dark))
+                    el.addWidget(self._empty_lbl("Dodaj pierwszą zaszyfrowaną notatkę.", 12, dark, muted=True))
+                    add_e = QPushButton("+ Dodaj notatkę")
+                    add_e.setFixedHeight(42)
+                    add_e.setFixedWidth(200)
+                    add_e.setStyleSheet(f"background: #5a67d8; color: white; border-radius: 10px; font-size: 13px; font-weight: bold; border: none;")
+                    add_e.clicked.connect(self._add_note)
+                    el.addWidget(add_e, alignment=Qt.AlignmentFlag.AlignCenter)
+                else:
+                    el.addWidget(self._empty_lbl("Brak haseł", 15, dark))
+                    el.addWidget(self._empty_lbl("Nie masz jeszcze żadnych zapisanych haseł.", 12, dark, muted=True))
+                    add_e = QPushButton("+ Dodaj pierwsze hasło")
+                    add_e.setFixedHeight(42)
+                    add_e.setFixedWidth(220)
+                    add_e.setStyleSheet(f"background: {accent}; color: white; border-radius: 10px; font-size: 13px; font-weight: bold; border: none;")
+                    add_e.clicked.connect(self._add_password)
+                    el.addWidget(add_e, alignment=Qt.AlignmentFlag.AlignCenter)
 
             self._list_vl.addWidget(empty)
             self._list_vl.addStretch()
@@ -1950,6 +2238,18 @@ class MainWindow(QMainWindow):
         self._load_passwords(self._search_entry.text().strip())
 
     # ── Add / edit password ───────────────────────────────────────────
+
+    def _add_smart(self):
+        """Dodaje hasło lub notatkę zależnie od aktywnej kategorii."""
+        if self._active_category == "Notatki":
+            self._add_note()
+        else:
+            self._add_password()
+
+    def _add_note(self):
+        dlg = NoteFormDialog(self, self.db, self.user)
+        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.result:
+            self._refresh(rebuild_sidebar=True)
 
     def _add_password(self):
         dlg = PasswordFormDialog(self, self.db, self.crypto, self.user)
