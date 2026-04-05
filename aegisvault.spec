@@ -26,6 +26,33 @@ def _safe_collect(pkg):
 kr_datas, kr_binaries, kr_hidden = _safe_collect("keyring")
 qt_datas, qt_binaries, qt_hidden = _safe_collect("PyQt6")
 
+# Filtruj binarne frameworki Qt których nie używamy.
+# excludes= w Analysis odfiltrowuje tylko moduły Pythona — nie pliki .framework/.so.
+_QT_UNUSED = {
+    "QtNfc", "QtBluetooth",
+    "QtWebEngine", "QtWebEngineCore", "QtWebEngineWidgets", "QtWebEngineQuick",
+    "QtMultimedia", "QtMultimediaWidgets", "QtMultimediaQuick",
+    "QtLocation", "QtPositioning", "QtPositioningQuick",
+    "QtSensors", "QtSensorsQuick",
+    "QtSerialPort", "QtSerialBus",
+    "QtCharts", "QtDataVisualization",
+    "Qt3DCore", "Qt3DRender", "Qt3DInput", "Qt3DLogic",
+    "Qt3DAnimation", "Qt3DExtras", "Qt3DQuick",
+    "QtVirtualKeyboard",
+    "QtQuick", "QtQuickWidgets", "QtQuickControls2", "QtQuickTemplates2",
+    "QtQml", "QtQmlModels", "QtQmlWorkerScript",
+    "QtPdf", "QtPdfQuick", "QtPdfWidgets",
+    "QtRemoteObjects", "QtScxml", "QtStateMachine",
+    "QtNetworkAuth", "QtSql", "QtTest", "QtXml", "QtDBus",
+}
+
+def _keep_qt(entry):
+    name = entry[0] if isinstance(entry, tuple) else entry
+    return not any(mod in name for mod in _QT_UNUSED)
+
+qt_binaries = [e for e in qt_binaries if _keep_qt(e)]
+qt_datas    = [e for e in qt_datas    if _keep_qt(e)]
+
 added_files += kr_datas + qt_datas
 
 # winrt — Windows only
