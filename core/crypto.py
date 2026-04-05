@@ -1,72 +1,95 @@
 """
-crypto.py - Moduł szyfrowania dla Password Managera
-====================================================
-Wykorzystuje:
-- AES-256 (przez Fernet z biblioteki cryptography)
-- PBKDF2-HMAC-SHA256 do derywacji klucza z hasła masterowego
-- bcrypt do bezpiecznego hashowania hasła masterowego
+crypto.py - Moduł szyfrowania dla AegisVault
+=============================================
+KDF v0 (legacy):  PBKDF2-HMAC-SHA256 (480k iter) + bcrypt (rounds=12)
+KDF v1 (current): Argon2id (time=3, mem=64MB, par=4) — złoty standard od 2015
 """
 
 import os
 import base64
 import bcrypt
+from argon2 import PasswordHasher
+from argon2.low_level import hash_secret_raw, Type as Argon2Type
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
+
+# Wersje KDF
+KDF_PBKDF2   = 0   # stare: PBKDF2 + bcrypt
+KDF_ARGON2ID = 1   # nowe: Argon2id
+
+# Parametry Argon2id (OWASP 2023 minimum dla interaktywnego logowania)
+_A2_TIME_COST   = 3
+_A2_MEMORY_COST = 65536   # 64 MB
+_A2_PARALLELISM = 4
+_A2_HASH_LEN    = 32
+
+_ph = PasswordHasher(
+    time_cost=_A2_TIME_COST,
+    memory_cost=_A2_MEMORY_COST,
+    parallelism=_A2_PARALLELISM,
+)
 
 
 # ──────────────────────────────────────────────
 # HASŁO MASTEROWE
 # ──────────────────────────────────────────────
 
-def hash_master_password(password: str) -> bytes:
-    """
-    Hashuje hasło masterowe przy użyciu bcrypt.
-    Zwraca hash, który można bezpiecznie zapisać w bazie danych.
-    """
-    password_bytes = password.encode("utf-8")
-    salt = bcrypt.gensalt(rounds=12)  # wyższy rounds = wolniejszy brute-force
-    return bcrypt.hashpw(password_bytes, salt)
+def hash_master_password(password: str, version: int = KDF_ARGON2ID) -> bytes:
+    """Hashuje hasło masterowe. Zwraca bajty gotowe do zapisu w bazie."""
+    if version == KDF_ARGON2ID:
+        return _ph.hash(password).encode("utf-8")
+    # Legacy: bcrypt
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12))
 
 
-def verify_master_password(password: str, hashed: bytes) -> bool:
-    """
-    Weryfikuje czy podane hasło zgadza się z zapisanym hashem bcrypt.
-    """
-    password_bytes = password.encode("utf-8")
-    return bcrypt.checkpw(password_bytes, hashed)
+def verify_master_password(password: str, hashed: bytes, version: int = KDF_PBKDF2) -> bool:
+    """Weryfikuje hasło masterowe. Obsługuje oba formaty (bcrypt i Argon2id)."""
+    if version == KDF_ARGON2ID:
+        try:
+            return _ph.verify(hashed.decode("utf-8"), password)
+        except Exception:
+            return False
+    # Legacy: bcrypt
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), hashed)
+    except Exception:
+        return False
 
 
 # ──────────────────────────────────────────────
 # DERYWACJA KLUCZA AES Z HASŁA MASTEROWEGO
 # ──────────────────────────────────────────────
 
-def derive_key(password: str, salt: bytes) -> bytes:
+def derive_key(password: str, salt: bytes, version: int = KDF_PBKDF2) -> bytes:
     """
-    Derywuje 256-bitowy klucz AES z hasła masterowego używając PBKDF2.
-
-    Parametry:
-        password: hasło masterowe użytkownika
-        salt: losowa sól (przechowywana w bazie, nie jest sekretem)
-
+    Derywuje 256-bitowy klucz AES z hasła masterowego.
     Zwraca klucz w formacie base64 URL-safe (wymagany przez Fernet).
     """
+    if version == KDF_ARGON2ID:
+        raw = hash_secret_raw(
+            secret=password.encode("utf-8"),
+            salt=salt,
+            time_cost=_A2_TIME_COST,
+            memory_cost=_A2_MEMORY_COST,
+            parallelism=_A2_PARALLELISM,
+            hash_len=_A2_HASH_LEN,
+            type=Argon2Type.ID,
+        )
+        return base64.urlsafe_b64encode(raw)
+    # Legacy: PBKDF2-HMAC-SHA256
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
-        length=32,           # 256 bitów
+        length=32,
         salt=salt,
-        iterations=480_000,  # rekomendacja OWASP 2023
+        iterations=480_000,
     )
-    key = kdf.derive(password.encode("utf-8"))
-    return base64.urlsafe_b64encode(key)
+    return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
 
 
-def generate_salt() -> bytes:
-    """
-    Generuje kryptograficznie bezpieczną losową sól (16 bajtów).
-    Każdy użytkownik powinien mieć własną sól.
-    """
-    return os.urandom(16)
+def generate_salt(size: int = 32) -> bytes:
+    """Generuje kryptograficznie bezpieczną sól. Domyślnie 32 bajty (Argon2id)."""
+    return os.urandom(size)
 
 
 # ──────────────────────────────────────────────
@@ -75,49 +98,26 @@ def generate_salt() -> bytes:
 
 class CryptoManager:
     """
-    Klasa zarządzająca szyfrowaniem haseł podczas sesji.
-    Klucz jest przechowywany tylko w pamięci RAM — nigdy na dysku.
+    Zarządza szyfrowaniem haseł podczas sesji.
+    Klucz przechowywany tylko w RAM — nigdy na dysku.
     """
 
-    def __init__(self, master_password: str, salt: bytes):
-        """
-        Inicjalizuje menadżer kryptograficzny.
-        
-        Parametry:
-            master_password: hasło masterowe użytkownika
-            salt: sól pobrana z bazy danych dla danego użytkownika
-        """
-        key = derive_key(master_password, salt)
+    def __init__(self, master_password: str, salt: bytes, kdf_version: int = KDF_PBKDF2):
+        key = derive_key(master_password, salt, version=kdf_version)
         self._fernet = Fernet(key)
 
     def encrypt(self, plaintext: str) -> bytes:
-        """
-        Szyfruje hasło (lub inny tekst) algorytmem AES-256.
-
-        Zwraca zaszyfrowane bajty gotowe do zapisu w bazie danych.
-        Każde wywołanie generuje inny wynik (losowy IV wewnątrz Fernet).
-        """
         return self._fernet.encrypt(plaintext.encode("utf-8"))
 
-
     def decrypt(self, ciphertext: bytes) -> str:
-        """
-        Deszyfruje wcześniej zaszyfrowane hasło.
-        
-        Rzuca wyjątek InvalidToken jeśli klucz jest nieprawidłowy
-        lub dane zostały zmodyfikowane (integralność HMAC).
-        """
         return self._fernet.decrypt(ciphertext).decode("utf-8")
 
-    def reencrypt(self, ciphertext: bytes, new_master_password: str, salt: bytes) -> bytes:
-        """
-        Ponownie szyfruje hasło przy zmianie hasła masterowego.
-        Odszyfrowanie starym kluczem → zaszyfrowanie nowym.
-        """
+    def reencrypt(self, ciphertext: bytes, new_master_password: str,
+                  salt: bytes, kdf_version: int = KDF_PBKDF2) -> bytes:
+        """Ponownie szyfruje hasło przy zmianie hasła masterowego."""
         plaintext = self.decrypt(ciphertext)
-        new_key = derive_key(new_master_password, salt)
-        new_fernet = Fernet(new_key)
-        return new_fernet.encrypt(plaintext.encode("utf-8"))
+        new_key = derive_key(new_master_password, salt, version=kdf_version)
+        return Fernet(new_key).encrypt(plaintext.encode("utf-8"))
 
 
 # ──────────────────────────────────────────────
@@ -134,20 +134,9 @@ def generate_password(
     use_special: bool = True,
     exclude_ambiguous: bool = False
 ) -> str:
-    """
-    Generuje kryptograficznie bezpieczne losowe hasło.
-    
-    Parametry:
-        length:            długość hasła (min. 8)
-        use_uppercase:     czy używać wielkich liter
-        use_digits:        czy używać cyfr
-        use_special:       czy używać znaków specjalnych
-        exclude_ambiguous: wyklucza mylące znaki (0, O, l, 1, I)
-    """
     if length < 8:
         raise ValueError("Hasło powinno mieć co najmniej 8 znaków.")
 
-    # Budowanie zestawu znaków
     charset = string.ascii_lowercase
     required_chars = [secrets.choice(string.ascii_lowercase)]
 
@@ -173,44 +162,7 @@ def generate_password(
     if exclude_ambiguous:
         charset = charset.translate(str.maketrans("", "", "0OIl1"))
 
-    # Wypełnij resztę hasła losowymi znakami
     remaining = [secrets.choice(charset) for _ in range(length - len(required_chars))]
-    
-    # Połącz i przetasuj (żeby wymagane znaki nie były zawsze na początku)
     password_list = required_chars + remaining
     secrets.SystemRandom().shuffle(password_list)
-    
     return "".join(password_list)
-
-
-# ──────────────────────────────────────────────
-# TESTY (uruchom: python crypto.py)
-# ──────────────────────────────────────────────
-
-if __name__ == "__main__":
-    print("=== Test modułu crypto.py ===\n")
-
-    # 1. Hasło masterowe
-    master_pwd = "MojeHasloMasterowe123!"
-    hashed = hash_master_password(master_pwd)
-    print(f"[bcrypt] Hash hasła masterowego: {hashed[:30]}...")
-    print(f"[bcrypt] Weryfikacja (prawidłowe): {verify_master_password(master_pwd, hashed)}")
-    print(f"[bcrypt] Weryfikacja (złe hasło):  {verify_master_password('zlehaslo', hashed)}\n")
-
-    # 2. Szyfrowanie / deszyfrowanie
-    salt = generate_salt()
-    crypto = CryptoManager(master_pwd, salt)
-
-    secret = "moje_tajne_haslo_do_banku_99!"
-    encrypted = crypto.encrypt(secret)
-    decrypted = crypto.decrypt(encrypted)
-
-    print(f"[AES]   Oryginał:    {secret}")
-    print(f"[AES]   Zaszyfrowane: {encrypted[:40]}...")
-    print(f"[AES]   Odszyfrowane: {decrypted}")
-    print(f"[AES]   Zgodność:     {secret == decrypted}\n")
-
-    # 3. Generator haseł
-    for i in range(3):
-        pwd = generate_password(length=20, exclude_ambiguous=True)
-        print(f"[GEN]   Hasło {i+1}: {pwd}")

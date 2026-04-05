@@ -29,6 +29,7 @@ class User(Base):
     master_password_hash = Column(LargeBinary, nullable=False)
     salt                 = Column(LargeBinary, nullable=False)
     totp_secret          = Column(String(32), nullable=True)
+    kdf_version          = Column(Integer, default=0, nullable=False, server_default="0")
     created_at           = Column(DateTime, default=datetime.utcnow)
 
     passwords         = relationship("Password", back_populates="user", cascade="all, delete-orphan")
@@ -147,6 +148,11 @@ def init_db(db_path: str = "password_manager.db") -> object:
         for col, sql in migrations.items():
             if col not in pw_cols:
                 conn.execute(text(sql))
+
+        # Migracja users.kdf_version (Argon2id)
+        user_cols = [c["name"] for c in inspector.get_columns("users")]
+        if "kdf_version" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN kdf_version INTEGER NOT NULL DEFAULT 0"))
 
         # Migracja custom_categories.icon
         cc_cols = [c["name"] for c in inspector.get_columns("custom_categories")]

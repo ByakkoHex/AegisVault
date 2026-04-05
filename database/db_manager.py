@@ -10,7 +10,8 @@ from sqlalchemy.orm import sessionmaker
 from database.models import User, Password, PasswordHistory, CustomCategory, init_db, DEFAULT_CATEGORIES
 from core.crypto import (
     hash_master_password, verify_master_password,
-    generate_salt, CryptoManager
+    generate_salt, CryptoManager,
+    KDF_PBKDF2, KDF_ARGON2ID,
 )
 
 HISTORY_LIMIT = 10   # maks. wersji historii na wpis
@@ -31,11 +32,12 @@ class DatabaseManager:
     def register_user(self, username: str, master_password: str) -> User | None:
         if self.session.query(User).filter_by(username=username).first():
             return None
-        salt = generate_salt()
+        salt = generate_salt(32)   # 32 bajtów dla Argon2id
         user = User(
             username=username,
-            master_password_hash=hash_master_password(master_password),
-            salt=salt
+            master_password_hash=hash_master_password(master_password, version=KDF_ARGON2ID),
+            salt=salt,
+            kdf_version=KDF_ARGON2ID,
         )
         self.session.add(user)
         self.session.commit()
@@ -46,9 +48,63 @@ class DatabaseManager:
 
     def login_user(self, username: str, master_password: str) -> User | None:
         user = self.session.query(User).filter_by(username=username).first()
-        if not user or not verify_master_password(master_password, user.master_password_hash):
+        if not user:
             return None
+        kdf_v = user.kdf_version if user.kdf_version is not None else KDF_PBKDF2
+        if not verify_master_password(master_password, user.master_password_hash, version=kdf_v):
+            return None
+        # Auto-migracja z PBKDF2+bcrypt → Argon2id przy pierwszym logowaniu po aktualizacji
+        if kdf_v == KDF_PBKDF2:
+            self._migrate_to_argon2(user, master_password)
         return user
+
+    def _migrate_to_argon2(self, user: User, master_password: str) -> None:
+        """
+        Migruje konto z KDF v0 (PBKDF2+bcrypt) na v1 (Argon2id).
+        Re-szyfruje wszystkie hasła i historię nowym kluczem.
+        Działa w ramach istniejącej transakcji — rollback przy błędzie.
+        """
+        try:
+            old_crypto = CryptoManager(master_password, user.salt, kdf_version=KDF_PBKDF2)
+            new_salt   = generate_salt(32)
+            new_crypto = CryptoManager(master_password, new_salt, kdf_version=KDF_ARGON2ID)
+
+            # Re-szyfruj hasła
+            passwords = self.session.query(Password).filter_by(user_id=user.id).all()
+            for p in passwords:
+                try:
+                    p.encrypted_password = new_crypto._fernet.encrypt(
+                        old_crypto.decrypt(p.encrypted_password).encode("utf-8")
+                    )
+                except Exception:
+                    pass  # uszkodzony wpis — pomiń, nie blokuj migracji
+
+            # Re-szyfruj historię haseł
+            history_entries = (
+                self.session.query(PasswordHistory)
+                .join(Password)
+                .filter(Password.user_id == user.id)
+                .all()
+            )
+            for h in history_entries:
+                try:
+                    h.encrypted_password = new_crypto._fernet.encrypt(
+                        old_crypto.decrypt(h.encrypted_password).encode("utf-8")
+                    )
+                except Exception:
+                    pass
+
+            # Aktualizuj użytkownika
+            user.salt                 = new_salt
+            user.master_password_hash = hash_master_password(master_password, version=KDF_ARGON2ID)
+            user.kdf_version          = KDF_ARGON2ID
+            self.session.commit()
+
+        except Exception as e:
+            self.session.rollback()
+            # Loguj błąd, ale nie blokuj logowania — stary KDF nadal działa
+            import logging
+            logging.getLogger(__name__).error(f"Argon2id migration failed for {user.username}: {e}")
 
     def set_totp_secret(self, user: User, secret: str) -> None:
         user.totp_secret = secret

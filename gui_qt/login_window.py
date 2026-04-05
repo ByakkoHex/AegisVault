@@ -741,7 +741,9 @@ class LoginWindow(QMainWindow):
     def _complete_login(self, user, master_password: str):
         _prefs.set("last_username", user.username)
         self.logged_user = user
-        self.crypto = CryptoManager(master_password, user.salt)
+        from core.crypto import KDF_PBKDF2
+        kdf_v = user.kdf_version if user.kdf_version is not None else KDF_PBKDF2
+        self.crypto = CryptoManager(master_password, user.salt, kdf_version=kdf_v)
         self._fade_and_close()
 
     def _fade_and_close(self):
