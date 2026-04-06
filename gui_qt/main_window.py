@@ -1918,10 +1918,26 @@ class MainWindow(QMainWindow):
         self._sync_dot.mousePressEvent = lambda e: self._open_sync()
         tl.addWidget(self._sync_dot)
 
-        # Update btn (ukryty)
-        self._update_btn = QPushButton("⬆")
-        self._update_btn.setFixedSize(36, 36)
-        self._update_btn.setStyleSheet("background: #b87800; color: white; border-radius: 18px; font-size: 15px; font-weight: bold; border: none;")
+        # Update badge (ukryty dopóki nie ma aktualizacji)
+        self._update_btn = QPushButton("↑  Nowa wersja")
+        self._update_btn.setFixedHeight(32)
+        self._update_btn.setStyleSheet("""
+            QPushButton {
+                background: #92400e;
+                color: #fde68a;
+                border: 1px solid #d97706;
+                border-radius: 8px;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 0 12px;
+            }
+            QPushButton:hover {
+                background: #b45309;
+                border-color: #f59e0b;
+                color: #fff;
+            }
+        """)
+        self._update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._update_btn.clicked.connect(self._open_update_dialog)
         self._update_btn.setVisible(False)
         tl.addWidget(self._update_btn)
@@ -3472,8 +3488,10 @@ class MainWindow(QMainWindow):
     def _on_update_found(self, info: dict):
         self._update_info = info
         if self._update_btn:
+            version = info.get("version", "")
+            self._update_btn.setText(f"↑  {version}" if version else "↑  Nowa wersja")
+            self._update_btn.setToolTip(f"Kliknij aby zaktualizować do {version}")
             self._update_btn.setVisible(True)
-            self._update_btn.setToolTip(f"Nowa wersja: {info.get('version', '?')}")
 
     def _open_update_dialog(self):
         try:
