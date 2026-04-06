@@ -40,7 +40,7 @@ from utils.logger import get_logger
 from gui_qt.gradient       import AnimatedGradientWidget
 from gui_qt.hex_background import HexBackground
 from gui_qt.animations     import shake
-from gui_qt.dialogs        import show_error, show_info, show_success
+from gui_qt.dialogs        import show_error, show_info, show_success, show_warning
 from gui_qt.style          import build_qss
 
 logger = get_logger(__name__)
@@ -93,6 +93,7 @@ class LoginWindow(QMainWindow):
         dark = (_prefs.get("appearance_mode") or "dark").lower() != "light"
 
         self.db          = DatabaseManager(db_path)
+        self._check_db_integrity()
         self.logged_user = None
         self.crypto      = None
         self._temp_password  = None
@@ -129,6 +130,27 @@ class LoginWindow(QMainWindow):
         # Windows Hello check w tle
         if _ON_WINDOWS:
             threading.Thread(target=self._check_wh, daemon=True).start()
+
+    # ── Integrity check ───────────────────────────────────────────────
+
+    def _check_db_integrity(self):
+        """Sprawdza integralność bazy SQLite przy starcie. Ostrzega gdy baza jest uszkodzona."""
+        import os
+        db_path = getattr(self.db, "db_path", None)
+        if not db_path or not os.path.exists(db_path):
+            return  # nowa baza — nic do sprawdzenia
+        try:
+            error = self.db.integrity_check()
+            if error:
+                get_logger().error(f"DB integrity check failed: {error}")
+                show_warning(
+                    "Baza danych — ostrzeżenie",
+                    f"Wykryto problem z plikiem bazy danych:\n\n{error}\n\n"
+                    "Zaleca się przywrócenie backupu. Aplikacja spróbuje kontynuować,\n"
+                    "ale niektóre dane mogą być niedostępne.",
+                )
+        except Exception as e:
+            get_logger().warning(f"DB integrity check exception: {e}")
 
     # ── Budowanie UI ──────────────────────────────────────────────────
 

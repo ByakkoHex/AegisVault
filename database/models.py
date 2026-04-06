@@ -131,6 +131,7 @@ def init_db(db_path: str = "password_manager.db") -> object:
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA cache_size=-32000")
         cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
     Base.metadata.create_all(engine)

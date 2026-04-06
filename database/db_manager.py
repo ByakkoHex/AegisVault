@@ -520,5 +520,19 @@ class DatabaseManager:
             self.session.rollback()
             raise
 
+    def integrity_check(self) -> str | None:
+        """
+        Uruchamia PRAGMA integrity_check na bazie.
+        Zwraca None gdy OK, lub opis błędu gdy baza jest uszkodzona.
+        """
+        try:
+            from sqlalchemy import text
+            result = self.session.execute(text("PRAGMA integrity_check")).fetchall()
+            if result and result[0][0] == "ok":
+                return None
+            return "\n".join(row[0] for row in result)
+        except Exception as e:
+            return str(e)
+
     def close(self):
         self.session.close()

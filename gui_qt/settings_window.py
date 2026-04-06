@@ -830,6 +830,42 @@ class SettingsPanel(QWidget):
         self._al_btns = {lbl: alrl.itemAt(i).widget() for i, lbl in enumerate(_al_labels)}
         card_al.addWidget(al_row)
 
+        # ── Ochrona ekranu ────────────────────────────────────────────
+        card_sc = self._card(vl, "Ochrona przed zrzutami ekranu", dark)
+        sc_enabled = bool(self._prefs.get("screen_capture_protection"))
+        right_sc = self._row(card_sc,
+                             "Chroń okno przed zrzutami i nagraniami",
+                             "Okno będzie czarne na screenshotach i w OBS/nagrywaniu.\n"
+                             "Działa tylko na Windows 10 2004+ (WDA_EXCLUDEFROMCAPTURE).",
+                             dark)
+        sc_btn = QPushButton("Włączone" if sc_enabled else "Wyłączone")
+        sc_btn.setFixedSize(110, 32)
+        sc_btn.setCheckable(True)
+        sc_btn.setChecked(sc_enabled)
+        sc_btn.setStyleSheet(self._toggle_style(accent, sc_enabled, dark))
+        sc_btn.toggled.connect(lambda checked: self._on_screen_capture_toggle(checked, sc_btn, accent, dark))
+        right_sc.addWidget(sc_btn)
+
+        # ── Schowek ───────────────────────────────────────────────────
+        card_cb = self._card(vl, "Schowek", dark)
+        clr_hist = bool(self._prefs.get("clear_clipboard_history"))
+        right_cb = self._row(card_cb,
+                             "Wyczyść historię schowka po kopiowaniu",
+                             "Windows 11 Win+V przechowuje skopiowane hasła na stałe.\n"
+                             "Włącz, aby czyścić całą historię przy kopiowaniu hasła lub kodu OTP.",
+                             dark)
+        clr_btn = QPushButton("Włączone" if clr_hist else "Wyłączone")
+        clr_btn.setFixedSize(110, 32)
+        clr_btn.setCheckable(True)
+        clr_btn.setChecked(clr_hist)
+        clr_btn.setStyleSheet(self._toggle_style(accent, clr_hist, dark))
+        clr_btn.toggled.connect(lambda checked: (
+            self._prefs.set("clear_clipboard_history", checked),
+            clr_btn.setText("Włączone" if checked else "Wyłączone"),
+            clr_btn.setStyleSheet(self._toggle_style(accent, checked, dark)),
+        ))
+        right_cb.addWidget(clr_btn)
+
         # ── Zmiana hasła ──────────────────────────────────────────────
         card_pwd = self._card(vl, "Hasło masterowe", dark)
         self._row(card_pwd, "Zmiana hasła masterowego",
@@ -1060,6 +1096,16 @@ class SettingsPanel(QWidget):
     # ══════════════════════════════════════════════════════════════════
     # LOGIKA — SYSTEM
     # ══════════════════════════════════════════════════════════════════
+
+    def _on_screen_capture_toggle(self, checked: bool, btn: QPushButton,
+                                   accent: str, dark: bool) -> None:
+        self._prefs.set("screen_capture_protection", checked)
+        btn.setText("Włączone" if checked else "Wyłączone")
+        btn.setStyleSheet(self._toggle_style(accent, checked, dark))
+        # Zastosuj natychmiast na okno główne
+        win = self.window()
+        if hasattr(win, "apply_screen_capture_protection"):
+            win.apply_screen_capture_protection(checked)
 
     def _on_autostart_toggle(self, checked: bool, btn: QPushButton, accent: str) -> None:
         dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"

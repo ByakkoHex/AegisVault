@@ -21,6 +21,7 @@ import threading
 import time
 import webbrowser
 import pyperclip
+from utils.clipboard import copy_sensitive
 from datetime import datetime, timezone
 from PIL import Image
 
@@ -1502,7 +1503,7 @@ class PasswordRowWidget(QFrame):
     def _copy_otp(self):
         try:
             code = pyotp.TOTP(self.entry.otp_secret).now()
-            pyperclip.copy(code)
+            copy_sensitive(code)
             if self.on_copy:
                 self.on_copy(f"{self.entry.title} (OTP)")
         except Exception:
@@ -1628,7 +1629,7 @@ class PasswordRowWidget(QFrame):
     def _copy(self):
         try:
             plaintext = self.db.decrypt_password(self.entry, self.crypto)
-            pyperclip.copy(plaintext)
+            copy_sensitive(plaintext)
             self.db.mark_used(self.entry)
             if self.on_copy:
                 self.on_copy(self.entry.title)
@@ -1703,6 +1704,8 @@ class MainWindow(QMainWindow):
         self._bulk_mode          = False
         self._selected_ids: set[int] = set()
         self._row_widgets: list      = []
+        self._sort_by            = self._prefs.get("sort_by") or "name"
+        self._sort_asc           = self._prefs.get("sort_asc") if self._prefs.get("sort_asc") is not None else True
         self._strength_cache: dict = {}
         self._cat_colors_cache   = None
         self._cat_cache          = None
@@ -1748,6 +1751,10 @@ class MainWindow(QMainWindow):
         self._load_passwords(animate=False)
         self._lock_timer.start()
         self._compute_security_score()
+
+        # Screen capture protection
+        if self._prefs.get("screen_capture_protection"):
+            QTimer.singleShot(200, lambda: self.apply_screen_capture_protection(True))
 
         # Background tasks
         threading.Thread(target=lambda: self.db.purge_old_trash(self.user), daemon=True).start()
@@ -1799,6 +1806,22 @@ class MainWindow(QMainWindow):
         else:
             self._cleanup()
             event.accept()
+
+    def apply_screen_capture_protection(self, enable: bool) -> None:
+        """Włącza/wyłącza WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+)."""
+        import sys
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            hwnd = int(self.winId())
+            WDA_NONE               = 0x00000000
+            WDA_EXCLUDEFROMCAPTURE = 0x00000011
+            ctypes.windll.user32.SetWindowDisplayAffinity(
+                hwnd, WDA_EXCLUDEFROMCAPTURE if enable else WDA_NONE
+            )
+        except Exception as e:
+            logger.warning(f"SetWindowDisplayAffinity failed: {e}")
 
     def _quit_app(self):
         self._cleanup()
@@ -1979,6 +2002,34 @@ class MainWindow(QMainWindow):
         self._count_lbl.setStyleSheet(f"color: {'#888' if dark else '#666'}; font-size: 12px; background: transparent; border: none;")
         toll.addWidget(self._count_lbl)
         toll.addStretch()
+
+        # Sort combobox
+        _sort_opts = [
+            ("name_asc",      "Nazwa A→Z"),
+            ("name_desc",     "Nazwa Z→A"),
+            ("used_desc",     "Ostatnio użyte"),
+            ("strength_desc", "Siła ↓"),
+            ("strength_asc",  "Siła ↑"),
+            ("created_desc",  "Najnowsze"),
+            ("created_asc",   "Najstarsze"),
+        ]
+        self._sort_combo = QComboBox()
+        self._sort_combo.setFixedHeight(28)
+        self._sort_combo.setStyleSheet(
+            f"QComboBox {{ background: {'#2a2a2a' if dark else '#e8e8e8'}; color: {'#f0f0f0' if dark else '#1a1a1a'}; "
+            f"border-radius: 6px; font-size: 11px; border: none; padding: 0 8px; }}"
+            f"QComboBox::drop-down {{ border: none; width: 18px; }}"
+            f"QComboBox QAbstractItemView {{ background: {'#2a2a2a' if dark else '#fff'}; "
+            f"selection-background-color: {accent}; border: none; }}"
+        )
+        _cur_key = (self._sort_by + ("_asc" if self._sort_asc else "_desc"))
+        for key, label in _sort_opts:
+            self._sort_combo.addItem(label, key)
+        _idx = next((i for i, (k, _) in enumerate(_sort_opts) if k == _cur_key), 0)
+        self._sort_combo.setCurrentIndex(_idx)
+        self._sort_combo.currentIndexChanged.connect(self._on_sort_changed)
+        toll.addWidget(self._sort_combo)
+        toll.addSpacing(8)
 
         # Clipboard label
         self._clipboard_lbl = QLabel("")
@@ -2622,8 +2673,28 @@ class MainWindow(QMainWindow):
             fav = getattr(entry, "is_favorite", 0) or 0
             entry_data.append((entry, s_color, score, fav))
 
-        # Sortuj: ulubione na górze
-        entry_data.sort(key=lambda x: -x[3])
+        # Sortuj: ulubione zawsze na górze, potem według wybranego kryterium
+        def _sort_key(item):
+            entry, s_color, score, fav = item
+            if self._sort_by == "name":
+                sec = (entry.title or "").lower()
+            elif self._sort_by == "used":
+                sec = getattr(entry, "last_used_at", None) or datetime.min.replace(tzinfo=timezone.utc)
+            elif self._sort_by == "strength":
+                sec = score
+            elif self._sort_by == "created":
+                sec = getattr(entry, "created_at", None) or datetime.min.replace(tzinfo=timezone.utc)
+            else:
+                sec = (entry.title or "").lower()
+            return (-fav, sec if self._sort_asc else _Reverse(sec))
+
+        class _Reverse:
+            """Odwraca porządek sortowania dla dowolnego typu."""
+            def __init__(self, val): self.val = val
+            def __lt__(self, o): return self.val > o.val
+            def __eq__(self, o): return self.val == o.val
+
+        entry_data.sort(key=_sort_key)
 
         dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"
         for entry, s_color, score, fav in entry_data:
@@ -2653,6 +2724,18 @@ class MainWindow(QMainWindow):
         self._list_vl.addStretch()
 
     # ── Bulk operacje ──────────────────────────────────────────────────
+
+    def _on_sort_changed(self, idx: int):
+        key = self._sort_combo.itemData(idx)
+        if key.endswith("_asc"):
+            self._sort_by  = key[:-4]
+            self._sort_asc = True
+        else:
+            self._sort_by  = key[:-5]
+            self._sort_asc = False
+        self._prefs.set("sort_by", self._sort_by)
+        self._prefs.set("sort_asc", self._sort_asc)
+        self._load_passwords()
 
     def _toggle_bulk_mode(self):
         self._bulk_mode = not self._bulk_mode
