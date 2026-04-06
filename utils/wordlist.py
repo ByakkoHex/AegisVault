@@ -83,7 +83,7 @@ WORDS: list[str] = [
     "race", "rack", "raft", "rain", "rake", "ramp", "rang", "rank", "rate", "rave",
     "read", "real", "ream", "reap", "reed", "reef", "rein", "rest", "rice", "rich",
     "ride", "rift", "ring", "ripe", "rise", "risk", "road", "roam", "roar", "robe",
-    "rock", "rode", "role", "roll", "roof", "rope", "rose", "roam", "roost", "rout",
+    "rock", "rode", "role", "roll", "roof", "rope", "rose", "rook", "roost", "rout",
     "rove", "rule", "rush",
     # S
     "safe", "sage", "sail", "salt", "sand", "sane", "sang", "sash", "save", "scale",

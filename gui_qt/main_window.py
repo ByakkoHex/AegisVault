@@ -1462,10 +1462,11 @@ class PasswordRowWidget(QFrame):
             self._otp_btn.setToolTip("Kopiuj kod OTP (TOTP)")
             self._otp_btn.clicked.connect(self._copy_otp)
             brl.addWidget(self._otp_btn)
-            # Live OTP timer
+            # Live OTP timer — parent=self zapewnia auto-stop przy deleteLater()
             self._otp_timer = QTimer(self)
             self._otp_timer.timeout.connect(self._refresh_otp_btn)
             self._otp_timer.start(1000)
+            self.destroyed.connect(self._otp_timer.stop)
             self._refresh_otp_btn()
 
         # ── Edytuj ───────────────────────────────────────────────────
@@ -2481,8 +2482,8 @@ class MainWindow(QMainWindow):
         if self._gen_upper:   chars += string.ascii_uppercase
         if self._gen_digits:  chars += string.digits
         if self._gen_special: chars += "!@#$%^&*()-_=+[]{}|;:,.<>?"
-        import random
-        pwd = "".join(random.choices(chars, k=self._gen_length))
+        import secrets as _sec
+        pwd = "".join(_sec.choice(chars) for _ in range(self._gen_length))
         self._gen_pwd = pwd
         self._gen_out.setText(pwd[:30] + ("…" if len(pwd) > 30 else ""))
 
@@ -2688,11 +2689,13 @@ class MainWindow(QMainWindow):
         n = len(self._selected_ids)
         if not ask_yes_no("Kosz", f"Przenieść {n} {'wpis' if n == 1 else 'wpisy' if n < 5 else 'wpisów'} do kosza?", parent=self):
             return
+        moved = 0
         for eid in list(self._selected_ids):
             entry = self.db.get_password_by_id(eid, self.user)
             if entry:
                 try:
                     self.db.trash_password(entry)
+                    moved += 1
                 except Exception:
                     pass
         self._selected_ids.clear()
@@ -2701,7 +2704,7 @@ class MainWindow(QMainWindow):
         self._bulk_btn.setText("☑ Zaznacz")
         self._refresh()
         if self._toast:
-            self._toast.show(f"Przeniesiono {n} wpisów do kosza", "info")
+            self._toast.show(f"Przeniesiono {moved} wpisów do kosza", "info")
 
     def _bulk_move(self):
         if not self._selected_ids:
@@ -2758,20 +2761,21 @@ class MainWindow(QMainWindow):
             return
         cat = sel.text()
 
+        moved = 0
         for eid in list(self._selected_ids):
             entry = self.db.get_password_by_id(eid, self.user)
             if entry:
                 entry.category = cat
+                moved += 1
         self.db.session.commit()
 
-        n = len(self._selected_ids)
         self._selected_ids.clear()
         self._bulk_mode = False
         self._bulk_bar.setVisible(False)
         self._bulk_btn.setText("☑ Zaznacz")
         self._refresh()
         if self._toast:
-            self._toast.show(f"Przeniesiono {n} wpisów do kategorii «{cat}»", "success")
+            self._toast.show(f"Przeniesiono {moved} wpisów do kategorii «{cat}»", "success")
 
     def keyPressEvent(self, event):
         if (self._bulk_mode
