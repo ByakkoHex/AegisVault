@@ -43,8 +43,12 @@ def hash_master_password(password: str, version: int = KDF_ARGON2ID) -> bytes:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12))
 
 
-def verify_master_password(password: str, hashed: bytes, version: int = KDF_PBKDF2) -> bool:
-    """Weryfikuje hasło masterowe. Obsługuje oba formaty (bcrypt i Argon2id)."""
+def verify_master_password(password: str, hashed: bytes, version: int | None = None) -> bool:
+    """Weryfikuje hasło masterowe. Obsługuje oba formaty (bcrypt i Argon2id).
+    Jeśli version=None, autodetektuje format z treści hasha."""
+    if version is None:
+        h_str = hashed.decode("utf-8") if isinstance(hashed, bytes) else hashed
+        version = KDF_ARGON2ID if h_str.startswith("$argon2") else KDF_PBKDF2
     if version == KDF_ARGON2ID:
         try:
             return _ph.verify(hashed.decode("utf-8"), password)

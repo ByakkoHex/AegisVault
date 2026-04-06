@@ -1655,6 +1655,7 @@ class MainWindow(QMainWindow):
         self._toast: ToastManager | None = None
         self._update_btn: QPushButton | None = None
         self._update_info        = None
+        self.logged_out          = False
         self._sync_connected     = None
         self._strength_cache: dict = {}
         self._cat_colors_cache   = None
@@ -3052,6 +3053,7 @@ class MainWindow(QMainWindow):
     # ── Logout ────────────────────────────────────────────────────────
 
     def _logout(self):
+        self.logged_out = True
         self._cleanup()
         self.close()
         # LoginWindow uruchomi się przez main.py po powrocie

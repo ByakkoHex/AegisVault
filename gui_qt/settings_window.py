@@ -1291,13 +1291,16 @@ class SettingsPanel(QWidget):
         sep.start_animation()
         vl.addWidget(sep)
 
+        has_totp = bool(self.user.totp_secret)
         fields = {}
-        for key, lbl, ph, secret in [
+        field_defs = [
             ("old",  "Aktualne hasło masterowe", "Wpisz aktualne hasło...", True),
             ("new",  "Nowe hasło masterowe",      "Min. 8 znaków...",       True),
             ("new2", "Powtórz nowe hasło",         "Powtórz nowe hasło...", True),
-            ("totp", "Kod 2FA",                   "000000",                 False),
-        ]:
+        ]
+        if has_totp:
+            field_defs.append(("totp", "Kod 2FA", "000000", False))
+        for key, lbl, ph, secret in field_defs:
             vl.addWidget(QLabel(lbl))
             e = QLineEdit()
             e.setPlaceholderText(ph)
@@ -1324,7 +1327,8 @@ class SettingsPanel(QWidget):
         )
         ok_btn.clicked.connect(lambda: self._on_reset_password(
             dialog, fields["old"].text(), fields["new"].text(),
-            fields["new2"].text(), fields["totp"].text().strip()
+            fields["new2"].text(),
+            fields["totp"].text().strip() if "totp" in fields else None
         ))
         brl.addWidget(ok_btn)
         vl.addWidget(btn_row)
@@ -1332,8 +1336,8 @@ class SettingsPanel(QWidget):
         dialog.exec()
 
     def _on_reset_password(self, dialog: QDialog, old_pwd: str, new_pwd: str,
-                           new_pwd2: str, totp_code: str) -> None:
-        if not all([old_pwd, new_pwd, new_pwd2, totp_code]):
+                           new_pwd2: str, totp_code: str | None) -> None:
+        if not all([old_pwd, new_pwd, new_pwd2]):
             show_error("Błąd", "Wypełnij wszystkie pola!", parent=dialog)
             return
         if len(new_pwd) < 8:
@@ -1345,9 +1349,10 @@ class SettingsPanel(QWidget):
         if not verify_master_password(old_pwd, self.user.master_password_hash):
             show_error("Błąd", "Aktualne hasło jest nieprawidłowe!", parent=dialog)
             return
-        if not TOTPManager(secret=self.user.totp_secret).verify(totp_code):
-            show_error("Błąd 2FA", "Nieprawidłowy kod 2FA!", parent=dialog)
-            return
+        if self.user.totp_secret:
+            if not totp_code or not TOTPManager(secret=self.user.totp_secret).verify(totp_code):
+                show_error("Błąd 2FA", "Nieprawidłowy kod 2FA!", parent=dialog)
+                return
         try:
             self.crypto = self.db.change_master_password(self.user, self.crypto, new_pwd)
             show_success("Sukces", "Hasło masterowe zostało zmienione.", parent=dialog)

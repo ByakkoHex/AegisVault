@@ -46,10 +46,19 @@ def main():
     app.exec()
 
     # Po zamknięciu LoginWindow — sprawdź czy zalogowano
-    if login.logged_user and login.crypto:
+    while login.logged_user and login.crypto:
         from gui_qt.main_window import MainWindow
         main_win = MainWindow(login.db, login.crypto, login.logged_user)
         main_win.show()
+        app.exec()
+
+        if not main_win.logged_out:
+            break  # normalne zamknięcie okna — wyłącz aplikację
+
+        # Wylogowanie — wróć do ekranu logowania
+        from gui_qt.login_window import LoginWindow
+        login = LoginWindow(db_path=get_db_path("aegisvault.db"))
+        login.show()
         app.exec()
 
 
