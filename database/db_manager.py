@@ -7,7 +7,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
-from database.models import User, Password, PasswordHistory, CustomCategory, init_db, DEFAULT_CATEGORIES
+from database.models import User, Password, PasswordHistory, CustomCategory, AuditLog, init_db, DEFAULT_CATEGORIES
 from core.crypto import (
     hash_master_password, verify_master_password,
     generate_salt, CryptoManager,
@@ -519,6 +519,51 @@ class DatabaseManager:
         except Exception:
             self.session.rollback()
             raise
+
+    # ──────────────────────────────────────────────
+    # AUDIT LOG
+    # ──────────────────────────────────────────────
+
+    AUDIT_RETENTION_DAYS = 90
+
+    def log_event(self, user: "User", event_type: str,
+                  entry_id: int | None = None, details: str | None = None) -> None:
+        """Zapisuje zdarzenie do dziennika. Wywołanie ognioodporne — nie rzuca wyjątków."""
+        try:
+            entry = AuditLog(
+                user_id=user.id,
+                event_type=event_type,
+                entry_id=entry_id,
+                details=details,
+                timestamp=datetime.now(timezone.utc),
+            )
+            self.session.add(entry)
+            self.session.commit()
+        except Exception as e:
+            self.session.rollback()
+            import logging
+            logging.getLogger(__name__).warning(f"audit log write failed: {e}")
+
+    def get_audit_log(self, user: "User", limit: int = 100) -> list["AuditLog"]:
+        """Zwraca ostatnie `limit` zdarzeń dla użytkownika (najnowsze pierwsze)."""
+        return (
+            self.session.query(AuditLog)
+            .filter_by(user_id=user.id)
+            .order_by(AuditLog.timestamp.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def purge_old_audit(self, user: "User") -> int:
+        """Usuwa wpisy starsze niż AUDIT_RETENTION_DAYS dni. Zwraca liczbę usuniętych."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=self.AUDIT_RETENTION_DAYS)
+        deleted = (
+            self.session.query(AuditLog)
+            .filter(AuditLog.user_id == user.id, AuditLog.timestamp < cutoff)
+            .delete()
+        )
+        self.session.commit()
+        return deleted
 
     def integrity_check(self) -> str | None:
         """

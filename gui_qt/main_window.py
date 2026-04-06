@@ -779,6 +779,8 @@ class ExportDialog(QDialog):
     def _done(self, count: int, path: str):
         self._export_btn.setEnabled(True)
         self._export_btn.setText("Eksportuj →")
+        self.db.log_event(self.user, "export",
+                          details=f"{self._selected} • {count} wpisów • {os.path.basename(path)}")
         show_success("Eksport zakończony",
                      f"Wyeksportowano {count} haseł.\n\n{os.path.basename(path)}",
                      parent=self)
@@ -1504,6 +1506,8 @@ class PasswordRowWidget(QFrame):
         try:
             code = pyotp.TOTP(self.entry.otp_secret).now()
             copy_sensitive(code)
+            self.db.log_event(self.user, "otp_copied",
+                              entry_id=self.entry.id, details=self.entry.title)
             if self.on_copy:
                 self.on_copy(f"{self.entry.title} (OTP)")
         except Exception:
@@ -1631,6 +1635,8 @@ class PasswordRowWidget(QFrame):
             plaintext = self.db.decrypt_password(self.entry, self.crypto)
             copy_sensitive(plaintext)
             self.db.mark_used(self.entry)
+            self.db.log_event(self.user, "password_copied",
+                              entry_id=self.entry.id, details=self.entry.title)
             if self.on_copy:
                 self.on_copy(self.entry.title)
         except Exception:
@@ -1757,7 +1763,10 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(200, lambda: self.apply_screen_capture_protection(True))
 
         # Background tasks
-        threading.Thread(target=lambda: self.db.purge_old_trash(self.user), daemon=True).start()
+        threading.Thread(target=lambda: (
+            self.db.purge_old_trash(self.user),
+            self.db.purge_old_audit(self.user),
+        ), daemon=True).start()
         threading.Thread(target=self._bg_check_update, daemon=True).start()
         QTimer.singleShot(2000, self._sync_ping)
         QTimer.singleShot(4000, self._check_auto_backup)

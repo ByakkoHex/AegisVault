@@ -36,6 +36,7 @@ class User(Base):
 
     passwords         = relationship("Password", back_populates="user", cascade="all, delete-orphan")
     custom_categories = relationship("CustomCategory", back_populates="user", cascade="all, delete-orphan")
+    audit_logs        = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User id={self.id} username={self.username}>"
@@ -98,6 +99,25 @@ class PasswordHistory(Base):
     changed_at         = Column(DateTime, default=datetime.utcnow)
 
     password = relationship("Password", back_populates="history")
+
+
+class AuditLog(Base):
+    """Dziennik zdarzeń — aktywność użytkownika (ostatnie 90 dni)."""
+    __tablename__ = "audit_log"
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    event_type = Column(String(32), nullable=False)   # np. "login_ok", "password_copied"
+    entry_id   = Column(Integer, nullable=True)        # powiązany wpis (opcjonalnie)
+    details    = Column(String(256), nullable=True)    # dodatkowy kontekst (tytuł, kategoria…)
+    timestamp  = Column(DateTime(timezone=True),
+                        default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = relationship("User", back_populates="audit_logs")
+
+    __table_args__ = (
+        Index("ix_audit_user_ts", "user_id", "timestamp"),
+    )
 
 
 class CustomCategory(Base):
@@ -201,6 +221,22 @@ def init_db(db_path: str = "password_manager.db") -> object:
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_customcat_user_name "
                 "ON custom_categories (user_id, name)"
+            ))
+
+        # Migracja audit_log (nowa tabela — tworzona przez create_all, ale dodaj indeks gdy istnieje)
+        if not inspector.has_table("audit_log"):
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id    INTEGER NOT NULL REFERENCES users(id),
+                    event_type VARCHAR(32) NOT NULL,
+                    entry_id   INTEGER,
+                    details    VARCHAR(256),
+                    timestamp  DATETIME NOT NULL
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_audit_user_ts ON audit_log (user_id, timestamp)"
             ))
 
         conn.commit()

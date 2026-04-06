@@ -952,6 +952,14 @@ class SettingsPanel(QWidget):
         seql.addWidget(save_seq_btn)
         card_at.addWidget(seq_w)
 
+        # ── Dziennik aktywności ───────────────────────────────────────
+        card_audit = self._card(vl, "Dziennik aktywności", dark)
+        self._row(card_audit, "Historia zdarzeń",
+                  "Logowania, kopiowanie haseł, eksport — ostatnie 100 zdarzeń (90 dni).", dark)
+        self._action_btn(card_audit, "Pokaż dziennik", self._show_audit_log,
+                         "#2a2a4a" if dark else "#e8e8ff", "#3a3a6a" if dark else "#d0d0ff",
+                         text_color="#a0a8ff" if dark else "#4040aa")
+
     @staticmethod
     def _seg_style(accent: str, dark: bool, active: bool) -> str:
         if active:
@@ -1096,6 +1104,90 @@ class SettingsPanel(QWidget):
     # ══════════════════════════════════════════════════════════════════
     # LOGIKA — SYSTEM
     # ══════════════════════════════════════════════════════════════════
+
+    def _show_audit_log(self) -> None:
+        dark   = (self._prefs.get("appearance_mode") or "dark").lower() != "light"
+        accent = self._prefs.get_accent()
+
+        dlg = self._make_dialog("Dziennik aktywności", 560, 520)
+        vl  = QVBoxLayout(dlg)
+        vl.setContentsMargins(16, 16, 16, 16)
+        vl.setSpacing(8)
+
+        title = QLabel("📋  Dziennik aktywności")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; background: transparent; border: none;")
+        vl.addWidget(title)
+
+        sub = QLabel("Ostatnie 100 zdarzeń · automatyczne usuwanie po 90 dniach")
+        sub.setStyleSheet("font-size: 11px; color: #888; background: transparent; border: none;")
+        vl.addWidget(sub)
+
+        # Tabela zdarzeń
+        from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+        table = QTableWidget()
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(["Kiedy", "Zdarzenie", "Wpis", "Szczegóły"])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().setVisible(False)
+        table.setStyleSheet(f"""
+            QTableWidget {{
+                background: {'#1e1e1e' if dark else '#ffffff'}; border: none;
+                gridline-color: {'#333' if dark else '#e0e0e0'}; font-size: 12px;
+            }}
+            QTableWidget::item {{ padding: 4px 8px; }}
+            QHeaderView::section {{
+                background: {'#2a2a2a' if dark else '#f0f0f0'};
+                color: {'#aaa' if dark else '#555'};
+                font-size: 11px; border: none; padding: 4px 8px;
+            }}
+        """)
+
+        _labels = {
+            "login_ok":        "✅ Logowanie",
+            "login_fail":      "❌ Błędne hasło",
+            "password_copied": "📋 Skopiowano hasło",
+            "otp_copied":      "🔑 Skopiowano OTP",
+            "export":          "📤 Eksport",
+            "import":          "📥 Import",
+            "password_created":"➕ Dodano wpis",
+            "password_edited": "✏️ Edytowano wpis",
+            "password_deleted":"🗑 Usunięto wpis",
+            "master_changed":  "🔐 Zmieniono masterhasło",
+            "2fa_enabled":     "🔒 Włączono 2FA",
+            "2fa_disabled":    "🔓 Wyłączono 2FA",
+        }
+
+        entries = self.db.get_audit_log(self.user, limit=100)
+        table.setRowCount(len(entries))
+        for row, e in enumerate(entries):
+            ts = e.timestamp
+            if ts and hasattr(ts, "astimezone"):
+                import datetime as _dt
+                ts_str = ts.astimezone(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
+            else:
+                ts_str = str(ts)[:16] if ts else "—"
+            table.setItem(row, 0, QTableWidgetItem(ts_str))
+            table.setItem(row, 1, QTableWidgetItem(_labels.get(e.event_type, e.event_type)))
+            table.setItem(row, 2, QTableWidgetItem(str(e.entry_id) if e.entry_id else "—"))
+            table.setItem(row, 3, QTableWidgetItem(e.details or ""))
+
+        vl.addWidget(table, stretch=1)
+
+        close_btn = QPushButton("Zamknij")
+        close_btn.setFixedHeight(36)
+        close_btn.setStyleSheet(
+            f"background: {'#2a2a2a' if dark else '#e8e8e8'}; color: {'#f0f0f0' if dark else '#1a1a1a'};"
+            f" border-radius: 8px; font-size: 13px; border: none;"
+        )
+        close_btn.clicked.connect(dlg.accept)
+        vl.addWidget(close_btn)
+        dlg.exec()
 
     def _on_screen_capture_toggle(self, checked: bool, btn: QPushButton,
                                    accent: str, dark: bool) -> None:
