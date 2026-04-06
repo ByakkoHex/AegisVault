@@ -1717,12 +1717,17 @@ class MainWindow(QMainWindow):
         self._clipboard_qt_timer.timeout.connect(self._tick_clipboard)
         self._clipboard_entry_title = ""
 
-        # Generator state
+        # Generator state (hasło losowe)
         self._gen_length  = 16
         self._gen_upper   = True
         self._gen_digits  = True
         self._gen_special = True
         self._gen_pwd     = ""
+        # Generator state (diceware)
+        self._dice_count  = 5
+        self._dice_sep    = "-"
+        self._dice_cap    = False
+        self._dice_phrase = ""
 
         # Connect signals
         self._update_found_sig.connect(self._on_update_found)
@@ -2253,7 +2258,33 @@ class MainWindow(QMainWindow):
         gl.setContentsMargins(10, 8, 10, 10)
         gl.setSpacing(4)
 
-        # Długość
+        # ── Przełącznik tabów ─────────────────────────────────────────
+        tab_row = QWidget()
+        tab_row.setStyleSheet("background: transparent; border: none;")
+        trl = QHBoxLayout(tab_row)
+        trl.setContentsMargins(0, 0, 0, 4)
+        trl.setSpacing(2)
+        _tab_active   = f"background: {accent}; color: white; border-radius: 5px; font-size: 10px; font-weight: bold; border: none; padding: 2px 6px; min-height: 0;"
+        _tab_inactive = f"background: {'#333' if dark else '#d0d0d0'}; color: {'#aaa' if dark else '#666'}; border-radius: 5px; font-size: 10px; border: none; padding: 2px 6px; min-height: 0;"
+        self._tab_pwd  = QPushButton("Losowe")
+        self._tab_dice = QPushButton("Passphrase")
+        for b in (self._tab_pwd, self._tab_dice):
+            b.setFixedHeight(22)
+            trl.addWidget(b)
+        trl.addStretch()
+        gl.addWidget(tab_row)
+
+        # ── Stack — dwa panele ────────────────────────────────────────
+        self._gen_stack = QStackedWidget()
+        self._gen_stack.setStyleSheet("background: transparent; border: none;")
+
+        # Panel 1: hasło losowe
+        pwd_panel = QWidget()
+        pwd_panel.setStyleSheet("background: transparent; border: none;")
+        pl = QVBoxLayout(pwd_panel)
+        pl.setContentsMargins(0, 0, 0, 0)
+        pl.setSpacing(4)
+
         len_row = QWidget()
         len_row.setStyleSheet("background: transparent; border: none;")
         lrl = QHBoxLayout(len_row)
@@ -2265,71 +2296,184 @@ class MainWindow(QMainWindow):
         self._gen_len_lbl = QLabel(str(self._gen_length))
         self._gen_len_lbl.setStyleSheet(f"color: {accent}; font-size: 11px; font-weight: bold; background: transparent; border: none;")
         lrl.addWidget(self._gen_len_lbl)
-        gl.addWidget(len_row)
+        pl.addWidget(len_row)
 
         self._gen_slider = QSlider(Qt.Orientation.Horizontal)
         self._gen_slider.setRange(8, 64)
         self._gen_slider.setValue(self._gen_length)
-        self._gen_slider.setStyleSheet(f"""
+        _slider_sty = f"""
             QSlider::groove:horizontal {{ background: {'#444' if dark else '#ccc'}; height: 4px; border-radius: 2px; }}
             QSlider::handle:horizontal {{ background: {accent}; width: 12px; height: 12px; border-radius: 6px; margin: -4px 0; }}
             QSlider::sub-page:horizontal {{ background: {accent}; height: 4px; border-radius: 2px; }}
-        """)
+        """
+        self._gen_slider.setStyleSheet(_slider_sty)
         self._gen_slider.valueChanged.connect(self._gen_slider_changed)
-        gl.addWidget(self._gen_slider)
+        pl.addWidget(self._gen_slider)
 
-        # Opcje (checkboxy)
+        _cb_sty = f"""
+            QCheckBox {{ color: {'#d0d0d0' if dark else '#444'}; font-size: 11px; background: transparent; spacing: 6px; }}
+            QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid {'#666' if dark else '#aaa'}; border-radius: 3px; background: {'#2a2a2a' if dark else '#fff'}; }}
+            QCheckBox::indicator:checked {{ background: {accent}; border-color: {accent}; }}
+        """
         for label, attr in [("Duże litery", "_gen_upper"), ("Cyfry", "_gen_digits"), ("Znaki specjalne", "_gen_special")]:
             cb = QCheckBox(label)
             cb.setChecked(getattr(self, attr))
-            cb.setStyleSheet(f"""
-                QCheckBox {{
-                    color: {'#d0d0d0' if dark else '#444'};
-                    font-size: 11px; background: transparent; spacing: 6px;
-                }}
-                QCheckBox::indicator {{
-                    width: 14px; height: 14px;
-                    border: 1px solid {'#666' if dark else '#aaa'};
-                    border-radius: 3px;
-                    background: {'#2a2a2a' if dark else '#fff'};
-                }}
-                QCheckBox::indicator:checked {{
-                    background: {accent}; border-color: {accent};
-                }}
-            """)
+            cb.setStyleSheet(_cb_sty)
             cb.stateChanged.connect(lambda state, a=attr: setattr(self, a, bool(state)))
-            gl.addWidget(cb)
+            pl.addWidget(cb)
 
-        # Hasło output
         self._gen_out = QLabel("—")
         self._gen_out.setWordWrap(True)
         self._gen_out.setStyleSheet(f"color: {'#90c090' if dark else '#2d6a4f'}; font-size: 11px; font-family: 'Courier New', monospace; background: transparent; border: none;")
-        gl.addWidget(self._gen_out)
+        pl.addWidget(self._gen_out)
 
-        # Przyciski
-        btn_row = QWidget()
-        btn_row.setStyleSheet("background: transparent; border: none;")
-        brl = QHBoxLayout(btn_row)
-        brl.setContentsMargins(0, 0, 0, 0)
-        brl.setSpacing(4)
+        brl1 = QHBoxLayout()
+        brl1.setContentsMargins(0, 0, 0, 0)
+        brl1.setSpacing(4)
         gen_btn = QPushButton("Generuj")
         gen_btn.setFixedHeight(28)
         gen_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; padding: 0 6px; min-height: 0;")
         gen_btn.clicked.connect(self._gen_generate)
-        brl.addWidget(gen_btn)
+        brl1.addWidget(gen_btn)
         copy_btn = QPushButton("Kopiuj")
         copy_btn.setFixedHeight(28)
         copy_btn.setStyleSheet(f"background: {'#2a2a2a' if dark else '#e0e0e0'}; color: {'#f0f0f0' if dark else '#1a1a1a'}; border-radius: 6px; font-size: 11px; border: none; padding: 0 6px; min-height: 0;")
         copy_btn.clicked.connect(self._gen_copy)
-        brl.addWidget(copy_btn)
-        gl.addWidget(btn_row)
+        brl1.addWidget(copy_btn)
+        pl.addLayout(brl1)
+        self._gen_stack.addWidget(pwd_panel)
 
+        # Panel 2: Diceware / passphrase
+        dice_panel = QWidget()
+        dice_panel.setStyleSheet("background: transparent; border: none;")
+        dl = QVBoxLayout(dice_panel)
+        dl.setContentsMargins(0, 0, 0, 0)
+        dl.setSpacing(4)
+
+        cnt_row = QWidget()
+        cnt_row.setStyleSheet("background: transparent; border: none;")
+        crl = QHBoxLayout(cnt_row)
+        crl.setContentsMargins(0, 0, 0, 0)
+        cnt_lbl = QLabel("Liczba słów:")
+        cnt_lbl.setStyleSheet(f"color: {'#f0f0f0' if dark else '#1a1a1a'}; font-size: 11px; background: transparent; border: none;")
+        crl.addWidget(cnt_lbl)
+        crl.addStretch()
+        self._dice_cnt_lbl = QLabel(str(self._dice_count))
+        self._dice_cnt_lbl.setStyleSheet(f"color: {accent}; font-size: 11px; font-weight: bold; background: transparent; border: none;")
+        crl.addWidget(self._dice_cnt_lbl)
+        dl.addWidget(cnt_row)
+
+        self._dice_slider = QSlider(Qt.Orientation.Horizontal)
+        self._dice_slider.setRange(3, 8)
+        self._dice_slider.setValue(self._dice_count)
+        self._dice_slider.setStyleSheet(_slider_sty)
+        self._dice_slider.valueChanged.connect(self._dice_slider_changed)
+        dl.addWidget(self._dice_slider)
+
+        # Separator
+        sep_row = QWidget()
+        sep_row.setStyleSheet("background: transparent; border: none;")
+        sepl = QHBoxLayout(sep_row)
+        sepl.setContentsMargins(0, 0, 0, 0)
+        sepl.setSpacing(4)
+        sepl.addWidget(QLabel("Separator:") if False else
+                       (lambda lbl: (lbl.setStyleSheet(f"color: {'#d0d0d0' if dark else '#444'}; font-size: 11px; background: transparent; border: none;"), lbl)[1])(QLabel("Separator:")))
+        self._dice_sep_combo = QComboBox()
+        self._dice_sep_combo.addItems(["- myślnik", "  spacja", ". kropka", "_ podkreślnik"])
+        self._dice_sep_combo.setFixedHeight(22)
+        self._dice_sep_combo.setStyleSheet(
+            f"QComboBox {{ background: {'#333' if dark else '#d8d8d8'}; color: {'#f0f0f0' if dark else '#1a1a1a'}; border-radius: 4px; font-size: 10px; border: none; padding: 0 4px; }}"
+            f"QComboBox::drop-down {{ border: none; }}"
+        )
+        self._dice_sep_combo.currentIndexChanged.connect(self._dice_sep_changed)
+        sepl.addWidget(self._dice_sep_combo)
+        dl.addWidget(sep_row)
+
+        cap_cb = QCheckBox("Pierwsza litera wielka")
+        cap_cb.setChecked(self._dice_cap)
+        cap_cb.setStyleSheet(_cb_sty)
+        cap_cb.stateChanged.connect(lambda s: setattr(self, "_dice_cap", bool(s)))
+        dl.addWidget(cap_cb)
+
+        # Entropia + output
+        self._dice_entropy_lbl = QLabel("")
+        self._dice_entropy_lbl.setStyleSheet(f"color: {'#888' if dark else '#666'}; font-size: 10px; background: transparent; border: none;")
+        dl.addWidget(self._dice_entropy_lbl)
+
+        self._dice_out = QLabel("—")
+        self._dice_out.setWordWrap(True)
+        self._dice_out.setStyleSheet(f"color: {'#90c090' if dark else '#2d6a4f'}; font-size: 10px; font-family: 'Courier New', monospace; background: transparent; border: none;")
+        dl.addWidget(self._dice_out)
+
+        brl2 = QHBoxLayout()
+        brl2.setContentsMargins(0, 0, 0, 0)
+        brl2.setSpacing(4)
+        dice_gen_btn = QPushButton("Generuj")
+        dice_gen_btn.setFixedHeight(28)
+        dice_gen_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; padding: 0 6px; min-height: 0;")
+        dice_gen_btn.clicked.connect(self._dice_generate)
+        brl2.addWidget(dice_gen_btn)
+        dice_copy_btn = QPushButton("Kopiuj")
+        dice_copy_btn.setFixedHeight(28)
+        dice_copy_btn.setStyleSheet(f"background: {'#2a2a2a' if dark else '#e0e0e0'}; color: {'#f0f0f0' if dark else '#1a1a1a'}; border-radius: 6px; font-size: 11px; border: none; padding: 0 6px; min-height: 0;")
+        dice_copy_btn.clicked.connect(self._dice_copy)
+        brl2.addWidget(dice_copy_btn)
+        dl.addLayout(brl2)
+        self._gen_stack.addWidget(dice_panel)
+
+        gl.addWidget(self._gen_stack)
         vl.addWidget(gen)
+
+        # Podpięcie tabów
+        def _switch_tab(idx):
+            self._gen_stack.setCurrentIndex(idx)
+            self._tab_pwd.setStyleSheet(_tab_active if idx == 0 else _tab_inactive)
+            self._tab_dice.setStyleSheet(_tab_active if idx == 1 else _tab_inactive)
+
+        self._tab_pwd.clicked.connect(lambda: _switch_tab(0))
+        self._tab_dice.clicked.connect(lambda: _switch_tab(1))
+        _switch_tab(0)  # domyślnie zakładka "Losowe"
+        self._dice_update_entropy()
 
     def _gen_slider_changed(self, val):
         self._gen_length = val
         if hasattr(self, "_gen_len_lbl"):
             self._gen_len_lbl.setText(str(val))
+
+    def _dice_slider_changed(self, val):
+        self._dice_count = val
+        if hasattr(self, "_dice_cnt_lbl"):
+            self._dice_cnt_lbl.setText(str(val))
+        self._dice_update_entropy()
+
+    def _dice_sep_changed(self, idx):
+        self._dice_sep = ["-", " ", ".", "_"][idx]
+
+    def _dice_update_entropy(self):
+        if not hasattr(self, "_dice_entropy_lbl"):
+            return
+        from utils.wordlist import entropy_bits
+        bits = entropy_bits(self._dice_count)
+        strength = "słabe" if bits < 45 else "dobre" if bits < 60 else "silne" if bits < 80 else "bardzo silne"
+        self._dice_entropy_lbl.setText(f"Entropia: {bits:.0f} bitów ({strength})")
+
+    def _dice_generate(self):
+        import secrets
+        from utils.wordlist import WORDS
+        words = [secrets.choice(WORDS) for _ in range(self._dice_count)]
+        if self._dice_cap:
+            words = [w.capitalize() for w in words]
+        self._dice_phrase = self._dice_sep.join(words)
+        self._dice_out.setText(self._dice_phrase)
+
+    def _dice_copy(self):
+        if self._dice_phrase:
+            try:
+                pyperclip.copy(self._dice_phrase)
+                if self._toast:
+                    self._toast.show("Skopiowano do schowka", "success")
+            except Exception:
+                pass
 
     def _gen_generate(self):
         import string
