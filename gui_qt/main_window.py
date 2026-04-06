@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QScrollArea, QVBoxLayout, QHBoxLayout, QGridLayout,
     QTextEdit, QComboBox, QSlider, QCheckBox, QDialog,
     QSizePolicy, QStackedWidget, QProgressBar, QFileDialog,
-    QButtonGroup, QApplication,
+    QButtonGroup, QApplication, QListWidget,
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QSize, QRect, pyqtSignal,
@@ -1232,6 +1232,7 @@ class TrashDialog(QDialog):
 class PasswordRowWidget(QFrame):
     def __init__(self, parent, entry, db, crypto, user,
                  on_refresh, on_copy, on_autotype=None,
+                 on_select=None,
                  strength_color="#718096", strength_score=2,
                  cat_color="#718096", compact=False):
         super().__init__(parent)
@@ -1242,6 +1243,8 @@ class PasswordRowWidget(QFrame):
         self.on_refresh     = on_refresh
         self.on_copy        = on_copy
         self.on_autotype    = on_autotype
+        self.on_select      = on_select
+        self._checkbox: QCheckBox | None = None
         self.strength_color = strength_color
         self.strength_score = strength_score
         self.cat_color      = cat_color
@@ -1276,6 +1279,19 @@ class PasswordRowWidget(QFrame):
         rl = QHBoxLayout(self)
         rl.setContentsMargins(6, 6, 8, 6)
         rl.setSpacing(0)
+
+        # Checkbox do bulk selection (ukryty domyślnie)
+        self._checkbox = QCheckBox()
+        self._checkbox.setVisible(False)
+        self._checkbox.setStyleSheet(
+            "QCheckBox { margin: 0 4px 0 2px; background: transparent; border: none; }"
+            "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 3px; }"
+        )
+        if self.on_select:
+            self._checkbox.stateChanged.connect(
+                lambda state: self.on_select(self.entry.id, bool(state))
+            )
+        rl.addWidget(self._checkbox)
 
         # Pasek siły (lewy edge)
         str_bar = QFrame()
@@ -1500,6 +1516,19 @@ class PasswordRowWidget(QFrame):
         rl.setContentsMargins(6, 6, 8, 6)
         rl.setSpacing(0)
 
+        # Checkbox do bulk selection (ukryty domyślnie)
+        self._checkbox = QCheckBox()
+        self._checkbox.setVisible(False)
+        self._checkbox.setStyleSheet(
+            "QCheckBox { margin: 0 4px 0 2px; background: transparent; border: none; }"
+            "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 3px; }"
+        )
+        if self.on_select:
+            self._checkbox.stateChanged.connect(
+                lambda state: self.on_select(self.entry.id, bool(state))
+            )
+        rl.addWidget(self._checkbox)
+
         # Pasek koloru (fiolet notatek)
         bar = QFrame()
         bar.setFixedWidth(4)
@@ -1570,6 +1599,19 @@ class PasswordRowWidget(QFrame):
             brl.addWidget(b)
 
         rl.addWidget(btns)
+
+    def set_bulk_mode(self, active: bool):
+        if self._checkbox:
+            self._checkbox.setVisible(active)
+
+    def set_checked(self, checked: bool):
+        if self._checkbox:
+            self._checkbox.blockSignals(True)
+            self._checkbox.setChecked(checked)
+            self._checkbox.blockSignals(False)
+
+    def is_checked(self) -> bool:
+        return bool(self._checkbox and self._checkbox.isChecked())
 
     def _edit_note(self):
         dlg = NoteFormDialog(self.window(), self.db, self.on_refresh.__self__.user
@@ -1657,6 +1699,9 @@ class MainWindow(QMainWindow):
         self._update_info        = None
         self.logged_out          = False
         self._sync_connected     = None
+        self._bulk_mode          = False
+        self._selected_ids: set[int] = set()
+        self._row_widgets: list      = []
         self._strength_cache: dict = {}
         self._cat_colors_cache   = None
         self._cat_cache          = None
@@ -1949,12 +1994,65 @@ class MainWindow(QMainWindow):
         self._add_btn.clicked.connect(self._add_smart)
         toll.addWidget(self._add_btn)
 
+        _btn_bg = "#2a2a2a" if dark else "#e8e8e8"
+        _btn_fg = "#f0f0f0" if dark else "#1a1a1a"
+        self._bulk_btn = QPushButton("☑ Zaznacz")
+        self._bulk_btn.setFixedHeight(32)
+        self._bulk_btn.setStyleSheet(
+            f"background: {_btn_bg}; color: {_btn_fg}; border-radius: 8px; "
+            f"font-size: 12px; padding: 0 12px; border: none;"
+        )
+        self._bulk_btn.clicked.connect(self._toggle_bulk_mode)
+        toll.addWidget(self._bulk_btn)
+
         cl.addWidget(toolbar)
 
         sep2 = QFrame()
         sep2.setFixedHeight(1)
         sep2.setStyleSheet(f"background: {'#2a2a2a' if dark else '#d0d0d0'}; border: none;")
         cl.addWidget(sep2)
+
+        # Pasek bulk akcji (ukryty dopóki bulk_mode=False)
+        _bulk_bg  = "#1a2a1a" if dark else "#e8f5e9"
+        _bulk_fg  = "#7ec87e" if dark else "#2d6a4f"
+        self._bulk_bar = QFrame()
+        self._bulk_bar.setFixedHeight(44)
+        self._bulk_bar.setStyleSheet(f"background: {_bulk_bg}; border: none;")
+        self._bulk_bar.setVisible(False)
+        bbl = QHBoxLayout(self._bulk_bar)
+        bbl.setContentsMargins(12, 4, 12, 4)
+        bbl.setSpacing(8)
+
+        self._bulk_count_lbl = QLabel("0 zaznaczonych")
+        self._bulk_count_lbl.setStyleSheet(
+            f"color: {_bulk_fg}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
+        )
+        bbl.addWidget(self._bulk_count_lbl)
+        bbl.addStretch()
+
+        for txt, cb, sty in [
+            ("Zaznacz wszystkie", self._bulk_select_all,
+             f"background: transparent; color: {'#7ab8f5' if dark else '#1a5080'}; "
+             f"border: 1px solid {'#444' if dark else '#ccc'}; border-radius: 6px; "
+             f"font-size: 11px; padding: 0 8px; min-height: 0;"),
+            ("🗑 Do kosza", self._bulk_trash,
+             f"background: {'#3a1a1a' if dark else '#fde8e8'}; color: {'#ff7070' if dark else '#c0392b'}; "
+             f"border: none; border-radius: 6px; font-size: 11px; font-weight: 500; padding: 0 10px; min-height: 0;"),
+            ("📁 Przenieś do...", self._bulk_move,
+             f"background: {'#1a2a3a' if dark else '#dbeafe'}; color: {'#7ab8f5' if dark else '#1a4a80'}; "
+             f"border: none; border-radius: 6px; font-size: 11px; font-weight: 500; padding: 0 10px; min-height: 0;"),
+            ("Anuluj", self._toggle_bulk_mode,
+             f"background: transparent; color: {'#aaa' if dark else '#666'}; "
+             f"border: 1px solid {'#444' if dark else '#ccc'}; border-radius: 6px; "
+             f"font-size: 11px; padding: 0 8px; min-height: 0;"),
+        ]:
+            b = QPushButton(txt)
+            b.setFixedHeight(28)
+            b.setStyleSheet(sty)
+            b.clicked.connect(cb)
+            bbl.addWidget(b)
+
+        cl.addWidget(self._bulk_bar)
 
         # Password list
         self._list_scroll = QScrollArea()
@@ -2294,6 +2392,7 @@ class MainWindow(QMainWindow):
 
     def _load_passwords(self, query: str = "", animate: bool = True):
         # Usuń stare wiersze
+        self._row_widgets = []
         while self._list_vl.count():
             item = self._list_vl.takeAt(0)
             if item.widget():
@@ -2393,14 +2492,150 @@ class MainWindow(QMainWindow):
                 on_refresh=self._refresh,
                 on_copy=self._on_copy,
                 on_autotype=self._do_autotype,
+                on_select=self._on_entry_select,
                 strength_color=s_color,
                 strength_score=score,
                 cat_color=cat_col,
                 compact=self._compact_mode,
             )
+            if self._bulk_mode:
+                row.set_bulk_mode(True)
+                if entry.id in self._selected_ids:
+                    row.set_checked(True)
+            self._row_widgets.append(row)
             self._list_vl.addWidget(row)
 
         self._list_vl.addStretch()
+
+    # ── Bulk operacje ──────────────────────────────────────────────────
+
+    def _toggle_bulk_mode(self):
+        self._bulk_mode = not self._bulk_mode
+        if not self._bulk_mode:
+            self._selected_ids.clear()
+        self._bulk_bar.setVisible(self._bulk_mode)
+        self._bulk_btn.setText("✕ Anuluj zaznaczanie" if self._bulk_mode else "☑ Zaznacz")
+        for row in self._row_widgets:
+            row.set_bulk_mode(self._bulk_mode)
+            if not self._bulk_mode:
+                row.set_checked(False)
+        self._update_bulk_bar()
+
+    def _on_entry_select(self, entry_id: int, checked: bool):
+        if checked:
+            self._selected_ids.add(entry_id)
+        else:
+            self._selected_ids.discard(entry_id)
+        self._update_bulk_bar()
+
+    def _update_bulk_bar(self):
+        n = len(self._selected_ids)
+        self._bulk_count_lbl.setText(f"{n} zaznaczonych" if n != 1 else "1 zaznaczony")
+
+    def _bulk_select_all(self):
+        for row in self._row_widgets:
+            row.set_checked(True)
+            self._selected_ids.add(row.entry.id)
+        self._update_bulk_bar()
+
+    def _bulk_trash(self):
+        if not self._selected_ids:
+            return
+        n = len(self._selected_ids)
+        if not ask_yes_no("Kosz", f"Przenieść {n} {'wpis' if n == 1 else 'wpisy' if n < 5 else 'wpisów'} do kosza?", parent=self):
+            return
+        for eid in list(self._selected_ids):
+            entry = self.db.get_password_by_id(eid, self.user)
+            if entry:
+                try:
+                    self.db.trash_password(entry)
+                except Exception:
+                    pass
+        self._selected_ids.clear()
+        self._bulk_mode = False
+        self._bulk_bar.setVisible(False)
+        self._bulk_btn.setText("☑ Zaznacz")
+        self._refresh()
+        if self._toast:
+            self._toast.show(f"Przeniesiono {n} wpisów do kosza", "info")
+
+    def _bulk_move(self):
+        if not self._selected_ids:
+            return
+        cats = [c for c in self.db.get_all_categories(self.user)
+                if c not in ("Wszystkie", "Notatki", "Ulubione")]
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Przenieś do kategorii")
+        dlg.setFixedSize(280, 360)
+        dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"
+        dlg.setStyleSheet(f"background: {'#1e1e1e' if dark else '#ffffff'}; color: {'#f0f0f0' if dark else '#1a1a1a'};")
+        vl = QVBoxLayout(dlg)
+        vl.setContentsMargins(16, 16, 16, 16)
+        vl.setSpacing(8)
+
+        lbl = QLabel(f"Wybierz kategorię dla {len(self._selected_ids)} wpisów:")
+        lbl.setStyleSheet("font-size: 13px; font-weight: bold; background: transparent; border: none;")
+        vl.addWidget(lbl)
+
+        list_w = QListWidget()
+        list_w.setStyleSheet(
+            f"background: {'#2a2a2a' if dark else '#f5f5f5'}; border-radius: 8px; border: none; font-size: 13px;"
+            f" QListWidget::item:selected {{ background: {'#1f6aa5' if dark else '#bee3f8'}; }}"
+        )
+        for cat in cats:
+            list_w.addItem(cat)
+        if list_w.count() > 0:
+            list_w.setCurrentRow(0)
+        vl.addWidget(list_w, stretch=1)
+
+        btn_row = QWidget()
+        btn_row.setStyleSheet("background: transparent; border: none;")
+        brl = QHBoxLayout(btn_row)
+        brl.setContentsMargins(0, 4, 0, 0)
+        brl.setSpacing(8)
+        cancel = QPushButton("Anuluj")
+        cancel.setFixedHeight(34)
+        cancel.setStyleSheet("background: transparent; border: 1px solid #555; border-radius: 6px; color: #aaa; font-size: 12px;")
+        cancel.clicked.connect(dlg.reject)
+        ok_btn = QPushButton("Przenieś")
+        ok_btn.setFixedHeight(34)
+        ok_btn.setStyleSheet("background: #1f6aa5; color: white; border-radius: 6px; font-size: 12px; font-weight: bold; border: none;")
+        ok_btn.clicked.connect(dlg.accept)
+        list_w.itemDoubleClicked.connect(lambda: dlg.accept())
+        brl.addWidget(cancel)
+        brl.addWidget(ok_btn)
+        vl.addWidget(btn_row)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        sel = list_w.currentItem()
+        if not sel:
+            return
+        cat = sel.text()
+
+        for eid in list(self._selected_ids):
+            entry = self.db.get_password_by_id(eid, self.user)
+            if entry:
+                entry.category = cat
+        self.db.session.commit()
+
+        n = len(self._selected_ids)
+        self._selected_ids.clear()
+        self._bulk_mode = False
+        self._bulk_bar.setVisible(False)
+        self._bulk_btn.setText("☑ Zaznacz")
+        self._refresh()
+        if self._toast:
+            self._toast.show(f"Przeniesiono {n} wpisów do kategorii «{cat}»", "success")
+
+    def keyPressEvent(self, event):
+        if (self._bulk_mode
+                and event.modifiers() == Qt.KeyboardModifier.ControlModifier
+                and event.key() == Qt.Key.Key_A):
+            self._bulk_select_all()
+        else:
+            super().keyPressEvent(event)
 
     def _empty_lbl(self, text, size, dark, muted=False):
         lbl = QLabel(text)
