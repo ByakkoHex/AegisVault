@@ -12,7 +12,7 @@ import sys
 import pyperclip
 from utils.logger import get_logger
 
-_logger = get_logger()
+_logger = get_logger(__name__)
 
 # Czy winrt jest dostępne (Windows 10 2004+ z pakietem winrt)
 _winrt_available: bool | None = None   # None = nie sprawdzone jeszcze
