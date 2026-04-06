@@ -127,6 +127,31 @@ Aktualnie: brak dedykowanego pola URL — wpisywane ręcznie w "notatki" lub "lo
 
 ---
 
+### 🟠 Dialogi jako panele in-app (zamiast wyskakujących okien)
+
+Aktualnie: większość akcji otwiera osobne okna systemowe (`QDialog.exec()`), które
+wyskakują poza głównym oknem aplikacji i wyglądają jak osobne procesy.
+Wzorzec: okno ustawień (`SettingsWindow`) otwiera się jako panel wewnątrz głównego okna — 
+płynna animacja wjazdu z prawej strony, bez osobnego okna systemowego.
+
+Okna do przepisania na styl in-app (slide-in panel):
+- [ ] `PasswordFormDialog` — dodawanie / edycja hasła
+- [ ] `NoteFormDialog` — dodawanie / edycja notatki
+- [ ] `ExportDialog` — wybór formatu eksportu
+- [ ] `TrashDialog` — kosz (aktualnie osobne okno)
+- [ ] `CategoryDialog` — nowa kategoria
+- [ ] Dialogi w `login_window.py`: reset hasła (już jest jako strona w stacku — OK)
+
+Mechanizm (wzorowany na `SettingsWindow`):
+- [ ] Panel `QFrame` nakładany na `MainWindow` z prawej strony (lub z dołu dla mobilnego feel)
+- [ ] `QPropertyAnimation` na `geometry` — wjazd/wyjazd bez migania
+- [ ] Ciemne tło-overlay (`QWidget` z `rgba(0,0,0,0.5)`) klikalny → zamknięcie panelu
+- [ ] Klawisz Escape zamyka panel
+- [ ] Bazowa klasa `SlidePanelBase(QFrame)` z metodami `slide_in()` / `slide_out()`
+  którą dziedziczą wszystkie panele — DRY, spójny UX
+
+---
+
 ### 🟠 Bulk operacje na wpisach
 
 - [ ] Checkbox przy każdym wierszu (Shift+klik = zaznacz zakres)

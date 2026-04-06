@@ -7,7 +7,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
-from database.models import User, Password, PasswordHistory, CustomCategory, AuditLog, init_db, DEFAULT_CATEGORIES
+from database.models import User, Password, PasswordField, PasswordHistory, CustomCategory, AuditLog, init_db, DEFAULT_CATEGORIES
 from core.crypto import (
     hash_master_password, verify_master_password,
     generate_salt, CryptoManager,
@@ -519,6 +519,39 @@ class DatabaseManager:
         except Exception:
             self.session.rollback()
             raise
+
+    # ──────────────────────────────────────────────
+    # WŁASNE POLA
+    # ──────────────────────────────────────────────
+
+    def get_custom_fields(self, entry: "Password", crypto: "CryptoManager") -> list[tuple[str, str]]:
+        """Zwraca listę (nazwa, wartość) — odszyfrowane."""
+        result = []
+        for f in entry.custom_fields:
+            try:
+                result.append((f.field_name, crypto.decrypt(f.encrypted_value)))
+            except Exception:
+                result.append((f.field_name, ""))
+        return result
+
+    def set_custom_fields(self, entry: "Password", crypto: "CryptoManager",
+                          fields: list[tuple[str, str]]) -> None:
+        """Zastępuje wszystkie pola wpisu nową listą (nazwa, wartość)."""
+        # Usuń stare
+        for f in list(entry.custom_fields):
+            self.session.delete(f)
+        # Dodaj nowe
+        for name, value in fields:
+            name = name.strip()
+            if not name:
+                continue
+            pf = PasswordField(
+                password_id=entry.id,
+                field_name=name,
+                encrypted_value=crypto.encrypt(value),
+            )
+            self.session.add(pf)
+        self.session.commit()
 
     # ──────────────────────────────────────────────
     # AUDIT LOG

@@ -66,6 +66,8 @@ class Password(Base):
     user    = relationship("User", back_populates="passwords")
     history = relationship("PasswordHistory", back_populates="password",
                            cascade="all, delete-orphan", order_by="PasswordHistory.changed_at.desc()")
+    custom_fields = relationship("PasswordField", back_populates="password",
+                                 cascade="all, delete-orphan", order_by="PasswordField.id")
 
     __table_args__ = (
         Index("ix_pwd_user_cat",     "user_id", "is_deleted", "category"),
@@ -87,6 +89,18 @@ class Password(Base):
 
     def __repr__(self):
         return f"<Password id={self.id} title={self.title}>"
+
+
+class PasswordField(Base):
+    """Własne pola klucz-wartość per wpis (zaszyfrowane)."""
+    __tablename__ = "password_fields"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    password_id = Column(Integer, ForeignKey("passwords.id"), nullable=False)
+    field_name  = Column(String(64), nullable=False)
+    encrypted_value = Column(LargeBinary, nullable=False)
+
+    password = relationship("Password", back_populates="custom_fields")
 
 
 class PasswordHistory(Base):
@@ -222,6 +236,17 @@ def init_db(db_path: str = "password_manager.db") -> object:
                 "CREATE INDEX IF NOT EXISTS ix_customcat_user_name "
                 "ON custom_categories (user_id, name)"
             ))
+
+        # Migracja password_fields
+        if not inspector.has_table("password_fields"):
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS password_fields (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    password_id INTEGER NOT NULL REFERENCES passwords(id),
+                    field_name  VARCHAR(64) NOT NULL,
+                    encrypted_value BLOB NOT NULL
+                )
+            """))
 
         # Migracja audit_log (nowa tabela — tworzona przez create_all, ale dodaj indeks gdy istnieje)
         if not inspector.has_table("audit_log"):

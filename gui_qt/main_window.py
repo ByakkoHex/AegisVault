@@ -386,6 +386,26 @@ class PasswordFormDialog(QDialog):
         fl.addWidget(otp_row)
         self._otp_e.textChanged.connect(self._update_otp_preview)
 
+        # ── Własne pola ───────────────────────────────────────────────
+        fl.addWidget(_section_label("Własne pola (opcjonalnie)"))
+
+        self._fields_container = QWidget()
+        self._fields_container.setStyleSheet("background: transparent;")
+        self._fields_vl = QVBoxLayout(self._fields_container)
+        self._fields_vl.setContentsMargins(0, 0, 0, 0)
+        self._fields_vl.setSpacing(4)
+        fl.addWidget(self._fields_container)
+        self._custom_field_rows: list[tuple] = []  # (name_edit, value_edit, row_widget)
+
+        add_field_btn = QPushButton("+ Dodaj pole")
+        add_field_btn.setFixedHeight(32)
+        add_field_btn.setStyleSheet(
+            f"background: transparent; border: 1.5px dashed {bdr}; color: {lbl_col}; "
+            f"border-radius: 8px; font-size: 12px;"
+        )
+        add_field_btn.clicked.connect(self._add_custom_field_row)
+        fl.addWidget(add_field_btn)
+
         fl.addStretch()
         scroll.setWidget(inner)
         vl.addWidget(scroll)
@@ -423,6 +443,8 @@ class PasswordFormDialog(QDialog):
                 self._expires_e.setText(entry.expires_at.strftime("%Y-%m-%d"))
             if entry.otp_secret:
                 self._otp_e.setText(entry.otp_secret)
+            for name, value in db.get_custom_fields(entry, crypto):
+                self._add_custom_field_row(name, value)
 
         # Hex background — drawn behind all widgets
         self._hex = HexBackground(self, hex_size=32, glow_max=2, glow_interval_ms=2000)
@@ -476,6 +498,56 @@ class PasswordFormDialog(QDialog):
             self._pwd_e.setEchoMode(QLineEdit.EchoMode.Normal)
         else:
             self._pwd_e.setEchoMode(QLineEdit.EchoMode.Password)
+
+    def _add_custom_field_row(self, name: str = "", value: str = ""):
+        """Dodaje wiersz własnego pola (nazwa + wartość + usuń)."""
+        row_w = QWidget()
+        row_w.setStyleSheet("background: transparent;")
+        rl = QHBoxLayout(row_w)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(6)
+
+        fi_bg  = self._fi_bg
+        fi_txt = self._fi_text
+        fi_bdr = self._fi_bdr
+        _field_style = (
+            f"background: {fi_bg}; color: {fi_txt}; "
+            f"border: 1.5px solid {fi_bdr}; border-radius: 8px; "
+            "padding: 6px 10px; font-size: 12px;"
+        )
+
+        name_e = QLineEdit(name)
+        name_e.setPlaceholderText("Nazwa pola")
+        name_e.setFixedHeight(36)
+        name_e.setStyleSheet(_field_style)
+
+        value_e = QLineEdit(value)
+        value_e.setPlaceholderText("Wartość")
+        value_e.setFixedHeight(36)
+        value_e.setStyleSheet(_field_style)
+
+        del_btn = QPushButton("✕")
+        del_btn.setFixedSize(30, 30)
+        del_btn.setStyleSheet(
+            "background: transparent; color: #e05252; border: none; "
+            "font-size: 14px; font-weight: bold;"
+        )
+
+        rl.addWidget(name_e, 2)
+        rl.addWidget(value_e, 3)
+        rl.addWidget(del_btn)
+
+        entry = (name_e, value_e, row_w)
+        self._custom_field_rows.append(entry)
+        self._fields_vl.addWidget(row_w)
+
+        def _remove():
+            if entry in self._custom_field_rows:
+                self._custom_field_rows.remove(entry)
+            row_w.setParent(None)
+            row_w.deleteLater()
+
+        del_btn.clicked.connect(_remove)
 
     def _update_strength(self):
         pwd = self._pwd_e.text()
@@ -567,13 +639,24 @@ class PasswordFormDialog(QDialog):
                 url=url, notes=notes, category=category, expires_at=expires,
                 otp_secret=otp_secret,
             )
+            target_entry = self.entry
         else:
-            self.db.add_password(
+            target_entry = self.db.add_password(
                 self.user, self.crypto,
                 title=title, username=username, plaintext_password=password,
                 url=url, notes=notes, category=category, expires_at=expires,
                 otp_secret=otp_secret,
             )
+
+        # Zapisz własne pola
+        fields = [
+            (n.text().strip(), v.text())
+            for n, v, _ in self._custom_field_rows
+            if n.text().strip()
+        ]
+        if target_entry:
+            self.db.set_custom_fields(target_entry, self.crypto, fields)
+
         self.result = True
         self.accept()
 
@@ -2546,7 +2629,7 @@ class MainWindow(QMainWindow):
     def _dice_copy(self):
         if self._dice_phrase:
             try:
-                pyperclip.copy(self._dice_phrase)
+                copy_sensitive(self._dice_phrase)
                 if self._toast:
                     self._toast.show("Skopiowano do schowka", "success")
             except Exception:
@@ -2566,7 +2649,7 @@ class MainWindow(QMainWindow):
     def _gen_copy(self):
         if self._gen_pwd:
             try:
-                pyperclip.copy(self._gen_pwd)
+                copy_sensitive(self._gen_pwd)
                 if self._toast:
                     self._toast.show("Skopiowano do schowka", "success")
             except Exception:
@@ -2704,11 +2787,11 @@ class MainWindow(QMainWindow):
             if self._sort_by == "name":
                 sec = (entry.title or "").lower()
             elif self._sort_by == "used":
-                sec = getattr(entry, "last_used_at", None) or datetime.min.replace(tzinfo=timezone.utc)
+                sec = getattr(entry, "last_used_at", None) or datetime.min
             elif self._sort_by == "strength":
                 sec = score
             elif self._sort_by == "created":
-                sec = getattr(entry, "created_at", None) or datetime.min.replace(tzinfo=timezone.utc)
+                sec = getattr(entry, "created_at", None) or datetime.min
             else:
                 sec = (entry.title or "").lower()
             return (-fav, sec if self._sort_asc else _Reverse(sec))
