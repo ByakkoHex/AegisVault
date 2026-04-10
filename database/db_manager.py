@@ -4,7 +4,31 @@ db_manager.py - Operacje na bazie danych dla Password Managera
 
 import json
 import base64
+import logging
+import os
 from datetime import datetime, timedelta, timezone
+
+_log = logging.getLogger(__name__)
+
+
+def _totp_fernet(username: str):
+    """Zwraca instancję Fernet do szyfrowania sekretu TOTP.
+    Klucz przechowywany w OS keyring (Windows Credential Store / macOS Keychain / SecretService).
+    Zwraca None jeśli keyring jest niedostępny."""
+    try:
+        import keyring
+        from cryptography.fernet import Fernet
+        service = "AegisVault.totp"
+        stored = keyring.get_password(service, username)
+        if stored:
+            key = stored.encode()
+        else:
+            key = Fernet.generate_key()
+            keyring.set_password(service, username, key.decode())
+        return Fernet(key)
+    except Exception as e:
+        _log.warning("TOTP keyring unavailable (%s) — secret stored as plaintext", e)
+        return None
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 from database.models import User, Password, PasswordField, PasswordHistory, CustomCategory, AuditLog, init_db, DEFAULT_CATEGORIES
@@ -106,8 +130,33 @@ class DatabaseManager:
             import logging
             logging.getLogger(__name__).error(f"Argon2id migration failed for {user.username}: {e}")
 
-    def set_totp_secret(self, user: User, secret: str) -> None:
-        user.totp_secret = secret
+    def has_totp(self, user: User) -> bool:
+        return bool(user.totp_secret)
+
+    def get_totp_secret(self, user: User) -> str | None:
+        """Zwraca plaintext sekret TOTP (odszyfrowany). None jeśli 2FA nie jest skonfigurowane."""
+        raw = user.totp_secret
+        if not raw:
+            return None
+        f = _totp_fernet(user.username)
+        if f is None:
+            return raw   # keyring niedostępny — traktuj jako plaintext (legacy)
+        try:
+            return f.decrypt(raw.encode()).decode()
+        except Exception:
+            # Nie udało się odszyfrować — prawdopodobnie stary plaintext (migracja)
+            return raw
+
+    def set_totp_secret(self, user: User, secret: str | None) -> None:
+        """Zapisuje sekret TOTP zaszyfrowany kluczem z OS keyring."""
+        if secret is None:
+            user.totp_secret = None
+        else:
+            f = _totp_fernet(user.username)
+            if f is not None:
+                user.totp_secret = f.encrypt(secret.encode()).decode()
+            else:
+                user.totp_secret = secret   # fallback: plaintext gdy keyring niedostępny
         self.session.commit()
 
     # ──────────────────────────────────────────────

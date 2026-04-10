@@ -1,17 +1,37 @@
-GNU AFFERO GENERAL PUBLIC LICENSE
-Version 3, 19 November 2007
+Copyright (C) 2026 Kamil Czajkowski (ByakkoHex). All rights reserved.
 
-Copyright (C) 2026 Kamil Czajkowski (byakkohex)
+SOURCE AVAILABLE LICENSE
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+This software and its source code are made publicly visible for transparency
+and educational purposes only.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
+PERMISSIONS:
+  - You MAY view and read the source code.
+  - You MAY inspect the code to verify security claims.
+  - You MAY report bugs, issues, and vulnerabilities to the author.
 
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+RESTRICTIONS — the following are NOT permitted without explicit prior
+written permission from the copyright holder:
+
+  - Using this software or any portion of its source code in your own
+    projects, products, or services (commercial or non-commercial).
+  - Copying, reproducing, or duplicating the source code or any part of it.
+  - Modifying, adapting, or creating derivative works based on this software.
+  - Distributing, sublicensing, selling, or otherwise transferring copies
+    of this software or its source code to any third party.
+  - Hosting or deploying a modified or unmodified version of this software
+    as a service for others.
+
+OWNERSHIP:
+  All intellectual property rights in this software remain exclusively with
+  Kamil Czajkowski (ByakkoHex). No license or right is granted by viewing
+  the source code other than those explicitly stated above.
+
+DISCLAIMER:
+  THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+  DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OR INABILITY TO USE THIS
+  SOFTWARE.
+
+To request permission for uses not covered by this license, contact the
+author via GitHub: https://github.com/ByakkoHex

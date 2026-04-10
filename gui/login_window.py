@@ -656,8 +656,8 @@ class LoginWindow(ctk.CTk):
             shake(self)
             show_error("Błąd logowania", "Nieprawidłowa nazwa użytkownika lub hasło.", parent=self)
             return
-        logger.info(f"Hasło poprawne: użytkownik={username!r}, ma_2FA={bool(user.totp_secret)}")
-        if user.totp_secret:
+        logger.info(f"Hasło poprawne: użytkownik={username!r}, ma_2FA={self.db.has_totp(user)}")
+        if self.db.has_totp(user):
             self._temp_password = password
             self._show_2fa_view(user)
         else:
@@ -667,7 +667,7 @@ class LoginWindow(ctk.CTk):
         code = self.entry_totp.get().strip()
         user = self._pending_user
         logger.info(f"Próba weryfikacji 2FA logowania: użytkownik={user.username!r}, kod={code!r} (długość={len(code)})")
-        totp = TOTPManager(secret=user.totp_secret)
+        totp = TOTPManager(secret=self.db.get_totp_secret(user))
         if not totp.verify(code):
             logger.warning(f"Błędny kod 2FA: użytkownik={user.username!r}, wpisany kod={code!r}")
             shake(self)

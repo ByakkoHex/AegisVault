@@ -10,8 +10,8 @@ Tabele:
 
 from datetime import datetime, timezone
 from sqlalchemy import (
-    create_engine, Column, Integer, String,
-    LargeBinary, ForeignKey, DateTime, Text, Index, event
+    create_engine, Column, Integer, String, Text,
+    LargeBinary, ForeignKey, DateTime, Index, event
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -28,7 +28,7 @@ class User(Base):
     username             = Column(String(64), unique=True, nullable=False)
     master_password_hash = Column(LargeBinary, nullable=False)
     salt                 = Column(LargeBinary, nullable=False)
-    totp_secret                = Column(String(32), nullable=True)
+    totp_secret                = Column(Text, nullable=True)        # Fernet-encrypted Base32 (via keyring key)
     kdf_version                = Column(Integer, default=0, nullable=False, server_default="0")
     recovery_salt              = Column(LargeBinary, nullable=True)   # sól do Argon2id recovery
     recovery_encrypted_master  = Column(LargeBinary, nullable=True)   # masterhasło zaszyfrowane kluczem recovery
