@@ -25,6 +25,7 @@ DEFAULTS: dict = {
     "autotype_delay":    2,                                  # sekundy opóźnienia przed wpisaniem
     "autotype_sequence": "{USERNAME}{TAB}{PASSWORD}{ENTER}", # sekwencja wpisywania
     "last_seen_version": "",                                 # ostatnia wersja przy której pokazano changelog
+    "language":          "pl",                               # "pl" | "en"
 }
 
 THEMES: dict = {

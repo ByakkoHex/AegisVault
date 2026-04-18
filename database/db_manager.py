@@ -602,6 +602,122 @@ class DatabaseManager:
             self.session.add(pf)
         self.session.commit()
 
+    def duplicate_password(self, entry: Password, crypto) -> Password:
+        """Tworzy kopię wpisu (bez historii haseł). Kopiuje też custom fields i otp_secret."""
+        plain = crypto.decrypt(entry.encrypted_password)
+        new_entry = Password(
+            user_id=entry.user_id,
+            title=f"Kopia — {entry.title}",
+            username=entry.username,
+            encrypted_password=crypto.encrypt(plain),
+            url=entry.url,
+            notes=entry.notes,
+            category=entry.category,
+            expires_at=entry.expires_at,
+            is_favorite=entry.is_favorite,
+            otp_secret=entry.otp_secret,
+            entry_type=entry.entry_type,
+        )
+        self.session.add(new_entry)
+        self.session.flush()   # potrzebne żeby new_entry.id był dostępny przed custom fields
+        for field in entry.custom_fields:
+            self.session.add(PasswordField(
+                password_id=new_entry.id,
+                field_name=field.field_name,
+                encrypted_value=field.encrypted_value,  # już zaszyfrowane tym samym kluczem
+            ))
+        self.session.commit()
+        return new_entry
+
+    # ──────────────────────────────────────────────
+    # PIN (quick unlock)
+    # ──────────────────────────────────────────────
+
+    def has_pin(self, user) -> bool:
+        return bool(user.pin_hash)
+
+    def set_pin(self, user, pin: str) -> None:
+        from argon2 import PasswordHasher
+        ph = PasswordHasher(time_cost=1, memory_cost=16384, parallelism=1)
+        user.pin_hash = ph.hash(pin).encode()
+        self.session.commit()
+
+    def verify_pin(self, user, pin: str) -> bool:
+        if not user.pin_hash:
+            return False
+        from argon2 import PasswordHasher
+        from argon2.exceptions import VerifyMismatchError, InvalidHashError
+        ph = PasswordHasher(time_cost=1, memory_cost=16384, parallelism=1)
+        try:
+            return ph.verify(user.pin_hash.decode(), pin)
+        except (VerifyMismatchError, InvalidHashError):
+            return False
+
+    def clear_pin(self, user) -> None:
+        user.pin_hash = None
+        self.session.commit()
+
+    # ──────────────────────────────────────────────
+    # TRUSTED DEVICES (TOTP remember 30 dni)
+    # ──────────────────────────────────────────────
+
+    TRUSTED_DEVICE_DAYS = 30
+
+    def add_trusted_device(self, user) -> str:
+        """Tworzy token zaufanego urządzenia (TTL 30 dni). Zwraca token do zapisania w keyring."""
+        import uuid, socket
+        from datetime import timedelta
+        from database.models import TrustedDevice
+        token = str(uuid.uuid4())
+        self.session.add(TrustedDevice(
+            user_id=user.id,
+            device_token=token,
+            device_name=socket.gethostname(),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=self.TRUSTED_DEVICE_DAYS),
+        ))
+        self.session.commit()
+        return token
+
+    def is_device_trusted(self, user, token: str) -> bool:
+        if not token:
+            return False
+        from database.models import TrustedDevice
+        device = self.session.query(TrustedDevice).filter_by(
+            user_id=user.id, device_token=token
+        ).first()
+        if not device:
+            return False
+        if device.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            self.session.delete(device)
+            self.session.commit()
+            return False
+        return True
+
+    def get_trusted_devices(self, user) -> list:
+        from database.models import TrustedDevice
+        return self.session.query(TrustedDevice).filter_by(user_id=user.id)\
+            .order_by(TrustedDevice.created_at.desc()).all()
+
+    def remove_trusted_device(self, device_id: int) -> None:
+        from database.models import TrustedDevice
+        device = self.session.get(TrustedDevice, device_id)
+        if device:
+            self.session.delete(device)
+            self.session.commit()
+
+    def remove_all_trusted_devices(self, user) -> None:
+        from database.models import TrustedDevice
+        self.session.query(TrustedDevice).filter_by(user_id=user.id).delete()
+        self.session.commit()
+
+    def purge_expired_trusted_devices(self, user) -> None:
+        from database.models import TrustedDevice
+        self.session.query(TrustedDevice).filter(
+            TrustedDevice.user_id == user.id,
+            TrustedDevice.expires_at < datetime.now(timezone.utc),
+        ).delete()
+        self.session.commit()
+
     # ──────────────────────────────────────────────
     # AUDIT LOG
     # ──────────────────────────────────────────────

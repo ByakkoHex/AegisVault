@@ -68,11 +68,12 @@ def handle_unlock(request_id: str, data: dict) -> None:
         return
 
     # Sprawdź TOTP jeśli użytkownik ma włączone 2FA
-    if user.totp_secret:
+    db = get_db()
+    if db.has_totp(user):
         if not totp_code:
             send_error(request_id, "TOTP_REQUIRED")
             return
-        if not verify_totp_code(user.totp_secret, totp_code):
+        if not verify_totp_code(db.get_totp_secret(user), totp_code):
             send_error(request_id, "INVALID_TOTP")
             return
 
@@ -84,7 +85,7 @@ def handle_unlock(request_id: str, data: dict) -> None:
 
     send_ok(request_id, {
         "username": username,
-        "has_totp": bool(user.totp_secret),
+        "has_totp": db.has_totp(user),
         "session_expires_at": expires_at.isoformat(),
     })
 

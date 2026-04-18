@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QStackedWidget, QScrollArea,
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QProgressBar, QFrame, QFileDialog,
-    QSizePolicy, QButtonGroup,
+    QSizePolicy, QButtonGroup, QCheckBox,
 )
 from PyQt6.QtCore  import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui   import QPixmap, QIcon, QFont, QImage
@@ -42,6 +42,7 @@ from gui_qt.hex_background import HexBackground
 from gui_qt.animations     import shake
 from gui_qt.dialogs        import show_error, show_info, show_success, show_warning
 from gui_qt.style          import build_qss
+from utils.i18n            import t
 
 logger = get_logger(__name__)
 _prefs = PrefsManager()
@@ -78,7 +79,7 @@ def _make_logo_pixmap(accent: str, size: int = 64) -> QPixmap | None:
 # LoginWindow
 # ══════════════════════════════════════════════════════════════════════
 
-class LoginWindow(QMainWindow):
+class LoginWindow(QWidget):
     # Sygnały thread-safe (emitowane z wątków, obsługiwane w głównym wątku)
     _wh_ready      = pyqtSignal(bool)           # WH availability check done
     _wh_result     = pyqtSignal(bool, str)      # WH verify done (success, password_or_error)
@@ -86,8 +87,12 @@ class LoginWindow(QMainWindow):
     _push_error    = pyqtSignal(str)
     _push_status   = pyqtSignal(str)            # "approved" | "denied" | "expired" | "pending"
 
-    def __init__(self, db_path: str = "aegisvault.db"):
+    # Emitowany po udanym logowaniu w trybie embedded (zamiast zamykania okna)
+    login_success  = pyqtSignal(object, object, object)   # user, crypto, db
+
+    def __init__(self, db_path: str = "aegisvault.db", embedded: bool = False):
         super().__init__()
+        self._embedded     = embedded
         self._accent       = _prefs.get_accent()
         self._accent_hover = _prefs.get_accent_hover()
         dark = (_prefs.get("appearance_mode") or "dark").lower() != "light"
@@ -112,8 +117,9 @@ class LoginWindow(QMainWindow):
         self._lockout_timer.setInterval(1000)
         self._lockout_timer.timeout.connect(self._tick_lockout)
 
-        self.setWindowTitle("AegisVault — Logowanie")
-        self.setFixedSize(460, 620)
+        if not self._embedded:
+            self.setWindowTitle("AegisVault — Logowanie")
+            self.setFixedSize(460, 620)
         self.setStyleSheet(build_qss(accent=self._accent, dark=dark))
 
         icon_path = os.path.join(
@@ -155,64 +161,137 @@ class LoginWindow(QMainWindow):
     # ── Budowanie UI ──────────────────────────────────────────────────
 
     def _build_ui(self, dark: bool):
-        central = QWidget()
-        self.setCentralWidget(central)
-
-        # HexBackground — pod wszystkim
+        # HexBackground — wypełnia cały widget
         self._hex_bg = HexBackground(
-            central, hex_size=32, glow_max=3, glow_interval_ms=1600
+            self, hex_size=34, glow_max=6, glow_interval_ms=900, glow_mode="breath"
         )
 
-        root_layout = QHBoxLayout(central)
+        root_layout = QHBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # Lewy pasek gradientu (10px, pionowy, animowany)
-        bg_color = "#212121" if dark else "#f0f0f0"
-        self._accent_bar = AnimatedGradientWidget(
-            accent=self._accent, base=bg_color,
-            anim_mode="slide", fps=15, period_ms=8000,
-            n_bands=1, direction="v",
+        # ── LEWY PANEL — branding ──────────────────────────────────
+        left = QWidget()
+        left.setObjectName("loginLeft")
+        left.setFixedWidth(390)
+        left.setStyleSheet(
+            "QWidget#loginLeft { "
+            "  background: rgba(16,16,16,0.78); "
+            "  border-right: 1px solid rgba(255,255,255,0.06); "
+            "}"
         )
-        self._accent_bar.setFixedWidth(10)
+        left_vl = QVBoxLayout(left)
+        left_vl.setContentsMargins(0, 0, 0, 0)
+        left_vl.setSpacing(0)
+
+        # Poziomy pasek akcentu na górze lewego panelu
+        self._accent_bar = AnimatedGradientWidget(
+            accent=self._accent, base="#1a1a1a",
+            anim_mode="slide", fps=15, period_ms=7000,
+            n_bands=1, direction="h",
+        )
+        self._accent_bar.setFixedHeight(4)
         self._accent_bar.start_animation()
-        root_layout.addWidget(self._accent_bar)
+        left_vl.addWidget(self._accent_bar)
 
-        # Prawa część — logo + stos widoków
-        right = QWidget()
-        right.setStyleSheet("background: transparent;")
-        right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(30, 24, 30, 24)
-        right_layout.setSpacing(0)
-        root_layout.addWidget(right, stretch=1)
+        # Zawartość brandingowa — wyśrodkowana pionowo
+        brand = QWidget()
+        brand.setStyleSheet("background: transparent;")
+        brand_vl = QVBoxLayout(brand)
+        brand_vl.setContentsMargins(44, 0, 44, 0)
+        brand_vl.setSpacing(0)
+        brand_vl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_vl.addWidget(brand, stretch=1)
 
-        # Logo
         self._logo_lbl = QLabel()
         self._logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pix = _make_logo_pixmap(self._accent, 64)
+        pix = _make_logo_pixmap(self._accent, 84)
         if pix:
             self._logo_lbl.setPixmap(pix)
         else:
-            self._logo_lbl.setText("🔐")
-            self._logo_lbl.setStyleSheet("font-size: 48px;")
-        right_layout.addWidget(self._logo_lbl)
+            self._logo_lbl.setText("🛡")
+            self._logo_lbl.setStyleSheet("font-size: 64px;")
+        brand_vl.addWidget(self._logo_lbl)
 
-        # Tytuł
-        title = QLabel("AegisVault")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 26px; font-weight: bold; margin-top: 4px;")
-        right_layout.addWidget(title)
+        brand_vl.addSpacing(18)
+
+        app_name = QLabel("AegisVault")
+        app_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        app_name.setStyleSheet(
+            "font-size: 30px; font-weight: 700; color: #f0f0f0; "
+            "letter-spacing: 1px; background: transparent;"
+        )
+        brand_vl.addWidget(app_name)
+
+        try:
+            from version import APP_VERSION
+            ver_lbl = QLabel(f"v{APP_VERSION}")
+        except Exception:
+            ver_lbl = QLabel("")
+        ver_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ver_lbl.setStyleSheet("font-size: 12px; color: #3d3d3d; margin-top: 4px; background: transparent;")
+        brand_vl.addWidget(ver_lbl)
+
+        brand_vl.addSpacing(24)
+
+        tagline = QLabel(t("login.tagline"))
+        tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tagline.setWordWrap(True)
+        tagline.setStyleSheet("font-size: 13px; color: #4a4a4a; line-height: 1.6; background: transparent;")
+        brand_vl.addWidget(tagline)
+
+        brand_vl.addSpacing(40)
+
+        for text in ["🔒  AES-256 + Argon2id", t("login.badge_local"), "🔑  Zero-knowledge"]:
+            lbl = QLabel(text)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("font-size: 11px; color: #333; padding: 3px 0; background: transparent;")
+            brand_vl.addWidget(lbl)
+
+        root_layout.addWidget(left)
+
+        # ── PRAWY PANEL — formularz ────────────────────────────────
+        right_outer = QWidget()
+        right_outer.setObjectName("loginRight")
+        right_outer.setStyleSheet(
+            "QWidget#loginRight { background: rgba(11,11,11,0.86); }"
+        )
+        right_vl = QVBoxLayout(right_outer)
+        right_vl.setContentsMargins(0, 0, 0, 0)
+        right_vl.setSpacing(0)
+
+        # Pasek akcentu na górze prawego panelu
+        self._accent_bar_right = AnimatedGradientWidget(
+            accent=self._accent, base="#1a1a1a",
+            anim_mode="slide", fps=15, period_ms=7000,
+            n_bands=1, direction="h",
+        )
+        self._accent_bar_right.setFixedHeight(4)
+        self._accent_bar_right.start_animation()
+        right_vl.addWidget(self._accent_bar_right)
+
+        form_container = QWidget()
+        form_container.setStyleSheet("background: transparent;")
+        form_vl = QVBoxLayout(form_container)
+        form_vl.setContentsMargins(52, 36, 52, 36)
+        form_vl.setSpacing(0)
 
         # Podtytuł — zmienny zależnie od widoku
-        self._subtitle = QLabel("Zaloguj się do swojego sejfu")
+        self._subtitle = QLabel(t("login.subtitle_login"))
         self._subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._subtitle.setStyleSheet("color: #888888; font-size: 13px; margin-bottom: 18px;")
-        right_layout.addWidget(self._subtitle)
+        self._subtitle.setStyleSheet(
+            "color: #666; font-size: 13px; margin-bottom: 16px; background: transparent;"
+        )
+        form_vl.addWidget(self._subtitle)
 
-        # QStackedWidget z widokami
+        # QStackedWidget z widokami (login / register / 2fa / ...)
         self._stack = QStackedWidget()
-        right_layout.addWidget(self._stack, stretch=1)
+        form_vl.addWidget(self._stack, stretch=1)
 
+        right_vl.addWidget(form_container, stretch=1)
+        root_layout.addWidget(right_outer, stretch=1)
+
+        # Buduj strony
         self._page_login    = self._build_login_page(dark)
         self._page_register = self._build_register_page(dark)
         self._page_2fa      = self._build_2fa_page(dark)
@@ -227,9 +306,8 @@ class LoginWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        c = self.centralWidget()
-        if c and self._hex_bg:
-            self._hex_bg.setGeometry(0, 0, c.width(), c.height())
+        if self._hex_bg:
+            self._hex_bg.setGeometry(0, 0, self.width(), self.height())
             self._hex_bg.lower()
 
     # ── Strona: Logowanie ─────────────────────────────────────────────
@@ -240,10 +318,10 @@ class LoginWindow(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setSpacing(4)
 
-        self._login_user = self._make_field(layout, "Nazwa użytkownika",
-                                            "Wpisz login...", secret=False)
-        self._login_pass = self._make_field(layout, "Hasło masterowe",
-                                            "Wpisz hasło...", secret=True)
+        self._login_user = self._make_field(layout, t("login.field_user"),
+                                            t("login.input_user"), secret=False)
+        self._login_pass = self._make_field(layout, t("login.field_pass"),
+                                            t("login.input_pass"), secret=True)
         self._login_pass.returnPressed.connect(self._on_login)
 
         last = _prefs.get("last_username")
@@ -258,9 +336,9 @@ class LoginWindow(QMainWindow):
         layout.addWidget(self._lockout_lbl)
 
         layout.addSpacing(8)
-        self._btn_login = self._make_btn(layout, "Zaloguj się", self._on_login, primary=True)
+        self._btn_login = self._make_btn(layout, t("login.btn_signin"), self._on_login, primary=True)
 
-        forgot_btn = QPushButton("Nie pamiętam hasła")
+        forgot_btn = QPushButton(t("login.forgot"))
         forgot_btn.setFixedHeight(28)
         forgot_btn.setStyleSheet(
             "QPushButton { background: transparent; border: none; "
@@ -271,7 +349,7 @@ class LoginWindow(QMainWindow):
         layout.addWidget(forgot_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Windows Hello — tylko Windows
-        self._wh_btn = QPushButton("🪟  Windows Hello")
+        self._wh_btn = QPushButton(t("login.wh_btn"))
         self._wh_btn.setEnabled(False)
         self._wh_btn.setVisible(_ON_WINDOWS)
         self._apply_secondary_style(self._wh_btn)
@@ -279,12 +357,12 @@ class LoginWindow(QMainWindow):
         layout.addWidget(self._wh_btn)
 
         # Divider
-        div = QLabel("─────── lub ───────")
+        div = QLabel(t("login.or_divider"))
         div.setAlignment(Qt.AlignmentFlag.AlignCenter)
         div.setStyleSheet("color: #666; font-size: 11px; margin: 4px 0;")
         layout.addWidget(div)
 
-        self._make_btn(layout, "Utwórz nowe konto",
+        self._make_btn(layout, t("login.btn_register"),
                        self._show_register, primary=False)
         layout.addStretch()
         return page
@@ -309,10 +387,10 @@ class LoginWindow(QMainWindow):
         layout = QVBoxLayout(content)
         layout.setSpacing(4)
 
-        self._reg_user  = self._make_field(layout, "Nazwa użytkownika",
-                                           "Wymyśl login...", secret=False)
-        self._reg_pass  = self._make_field(layout, "Hasło masterowe",
-                                           "Min. 8 znaków...", secret=True)
+        self._reg_user  = self._make_field(layout, t("login.field_user"),
+                                           t("login.input_user_new"), secret=False)
+        self._reg_pass  = self._make_field(layout, t("login.field_pass"),
+                                           t("login.input_pass_new"), secret=True)
 
         # Pasek siły
         self._reg_strength_bar = QProgressBar()
@@ -348,8 +426,8 @@ class LoginWindow(QMainWindow):
             self._checklist_rows.append(lbl)
         layout.addWidget(checklist_frame)
 
-        self._reg_pass2 = self._make_field(layout, "Powtórz hasło",
-                                           "Powtórz hasło...", secret=True)
+        self._reg_pass2 = self._make_field(layout, t("login.field_pass2"),
+                                           t("login.input_pass2"), secret=True)
         self._reg_match_lbl = QLabel()
         self._reg_match_lbl.setStyleSheet("font-size: 11px;")
         layout.addWidget(self._reg_match_lbl)
@@ -359,8 +437,8 @@ class LoginWindow(QMainWindow):
         self._reg_pass2.returnPressed.connect(self._on_register)
 
         layout.addSpacing(8)
-        self._make_btn(layout, "Zarejestruj się", self._on_register, primary=True)
-        self._make_btn(layout, "← Mam już konto", self._show_login, primary=False)
+        self._make_btn(layout, t("login.btn_register_submit"), self._on_register, primary=True)
+        self._make_btn(layout, t("login.btn_back_login"), self._show_login, primary=False)
         layout.addStretch()
         return page
 
@@ -374,8 +452,8 @@ class LoginWindow(QMainWindow):
 
         # Przełącznik trybu TOTP / Push
         toggle_row = QHBoxLayout()
-        self._btn_totp_tab = QPushButton("Kod TOTP")
-        self._btn_push_tab = QPushButton("Push Approve")
+        self._btn_totp_tab = QPushButton(t("login.tab_totp"))
+        self._btn_push_tab = QPushButton(t("login.tab_push"))
         for b in [self._btn_totp_tab, self._btn_push_tab]:
             b.setCheckable(True)
             b.setFixedHeight(34)
@@ -401,7 +479,7 @@ class LoginWindow(QMainWindow):
         totp_page.setStyleSheet("background: transparent;")
         totp_layout = QVBoxLayout(totp_page)
         totp_layout.setSpacing(8)
-        desc = QLabel("Otwórz Google Authenticator\nlub Microsoft Authenticator\ni wpisz 6-cyfrowy kod:")
+        desc = QLabel(t("login.totp_desc"))
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         desc.setStyleSheet("color: #888; font-size: 12px;")
         totp_layout.addWidget(desc)
@@ -423,6 +501,14 @@ class LoginWindow(QMainWindow):
         self._totp_lockout_lbl.setVisible(False)
         totp_layout.addWidget(self._totp_lockout_lbl)
 
+        self._trust_device_cb = QCheckBox(t("login.trust_machine"))
+        self._trust_device_cb.setStyleSheet(
+            "font-size: 11px; color: #888; background: transparent;"
+            "QCheckBox::indicator { width: 14px; height: 14px; }"
+        )
+        self._trust_device_cb.setChecked(False)
+        totp_layout.addWidget(self._trust_device_cb, alignment=Qt.AlignmentFlag.AlignCenter)
+
         self._make_btn(totp_layout, "Weryfikuj", self._on_verify_2fa, primary=True)
         totp_layout.addStretch()
         self._2fa_stack.addWidget(totp_page)
@@ -432,7 +518,7 @@ class LoginWindow(QMainWindow):
         push_page.setStyleSheet("background: transparent;")
         push_layout = QVBoxLayout(push_page)
         push_layout.setSpacing(6)
-        self._push_status_lbl = QLabel("⏳ Łączenie z serwerem...")
+        self._push_status_lbl = QLabel(t("login.push_connecting"))
         self._push_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._push_status_lbl.setStyleSheet("color: #888; font-size: 12px;")
         push_layout.addWidget(self._push_status_lbl)
@@ -575,7 +661,7 @@ class LoginWindow(QMainWindow):
         desc.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 8px;")
         s1l.addWidget(desc)
 
-        self._reset_user_e = self._make_field(s1l, "Nazwa użytkownika", "Wpisz login...", secret=False)
+        self._reset_user_e = self._make_field(s1l, t("login.field_user"), t("login.input_user"), secret=False)
         self._reset_user_e.returnPressed.connect(self._on_reset_step1)
         self._reset_step1_err = QLabel("")
         self._reset_step1_err.setStyleSheet("color: #e53e3e; font-size: 11px;")
@@ -711,8 +797,8 @@ class LoginWindow(QMainWindow):
         desc3.setStyleSheet("color: #4caf50; font-size: 12px; margin-bottom: 8px;")
         s3l.addWidget(desc3)
 
-        self._reset_pwd1_e  = self._make_field(s3l, "Nowe hasło", "Min. 8 znaków...", secret=True)
-        self._reset_pwd2_e  = self._make_field(s3l, "Powtórz hasło", "Powtórz nowe hasło...", secret=True)
+        self._reset_pwd1_e  = self._make_field(s3l, t("login.field_new_pass"), t("login.input_new_pass"), secret=True)
+        self._reset_pwd2_e  = self._make_field(s3l, t("login.field_pass2"), t("login.input_repeat_pass"), secret=True)
         self._reset_pwd2_e.returnPressed.connect(self._on_reset_step3)
 
         # Pasek siły
@@ -774,19 +860,19 @@ class LoginWindow(QMainWindow):
     def _show_login(self):
         self._push_poll_timer.stop()
         self._push_token = None
-        self._subtitle.setText("Zaloguj się do swojego sejfu")
+        self._subtitle.setText(t("login.subtitle_login"))
         self._stack.setCurrentIndex(0)
         QTimer.singleShot(50, self._login_pass.setFocus
                           if _prefs.get("last_username") else self._login_user.setFocus)
 
     def _show_register(self):
-        self._subtitle.setText("Utwórz nowe konto")
+        self._subtitle.setText(t("login.subtitle_register"))
         self._stack.setCurrentIndex(1)
         QTimer.singleShot(50, self._reg_user.setFocus)
 
     def _show_2fa(self, user):
         self._pending_user = user
-        self._subtitle.setText("Weryfikacja dwuetapowa")
+        self._subtitle.setText(t("login.subtitle_2fa"))
         self._stack.setCurrentIndex(2)
         self._switch_2fa("totp")
         QTimer.singleShot(50, self._totp_entry.setFocus)
@@ -797,21 +883,21 @@ class LoginWindow(QMainWindow):
         qr_img = qr_img.resize((180, 180), Image.NEAREST)
         self._setup2fa_qr.setPixmap(_pil_to_pixmap(qr_img))
         self._setup2fa_totp_manager = totp_manager
-        self._subtitle.setText("Skonfiguruj 2FA")
+        self._subtitle.setText(t("login.subtitle_setup2fa"))
         self._stack.setCurrentIndex(3)
         QTimer.singleShot(50, self._setup2fa_entry.setFocus)
 
     def _show_welcome(self, user):
         self._pending_user = user
         self._welcome_name_lbl.setText(f"Konto '{user.username}' gotowe!")
-        self._subtitle.setText("Witaj w AegisVault!")
+        self._subtitle.setText(t("login.subtitle_welcome"))
         self._stack.setCurrentIndex(4)
 
     def _show_reset(self):
         self._reset_user_e.setText(self._login_user.text())
         self._reset_stack.setCurrentIndex(0)
         self._reset_step1_err.setVisible(False)
-        self._subtitle.setText("Resetuj hasło masterowe")
+        self._subtitle.setText(t("login.subtitle_reset"))
         self._stack.setCurrentIndex(5)
         QTimer.singleShot(50, self._reset_user_e.setFocus)
 
@@ -840,7 +926,7 @@ class LoginWindow(QMainWindow):
             self._reset_step1_err.setText("Nie znaleziono użytkownika.")
             self._reset_step1_err.setVisible(True)
             return
-        has_totp     = bool(user.totp_secret)
+        has_totp     = self.db.has_totp(user)
         has_recovery = self.db.has_recovery_key(user)
         if not has_totp and not has_recovery:
             self._reset_step1_err.setText(
@@ -890,7 +976,7 @@ class LoginWindow(QMainWindow):
                 self._reset_step2_err.setText("Kod musi mieć dokładnie 6 cyfr.")
                 self._reset_step2_err.setVisible(True)
                 return
-            if not TOTPManager(secret=user.totp_secret).verify(code):
+            if not TOTPManager(secret=self.db.get_totp_secret(user)).verify(code):
                 self._reset_step2_err.setText("Nieprawidłowy kod 2FA.")
                 self._reset_step2_err.setVisible(True)
                 shake(self._reset_totp_e)
@@ -1092,7 +1178,16 @@ class LoginWindow(QMainWindow):
         self._login_attempts = 0
         self._update_lockout_ui()
 
-        if user.totp_secret:
+        if self.db.has_totp(user):
+            # Sprawdź czy urządzenie jest zaufane → pomiń 2FA
+            try:
+                import keyring
+                token = keyring.get_password("AegisVault.trusted", user.username)
+                if token and self.db.is_device_trusted(user, token):
+                    self._complete_login(user, password)
+                    return
+            except Exception:
+                pass
             self._temp_password = password
             self._show_2fa(user)
         else:
@@ -1105,7 +1200,7 @@ class LoginWindow(QMainWindow):
 
         code = self._totp_entry.text().strip()
         user = self._pending_user
-        totp = TOTPManager(secret=user.totp_secret)
+        totp = TOTPManager(secret=self.db.get_totp_secret(user))
         if not totp.verify(code):
             self._totp_attempts += 1
             self._apply_lockout(self._totp_attempts)
@@ -1123,6 +1218,16 @@ class LoginWindow(QMainWindow):
 
         # Udana weryfikacja — resetuj licznik
         self._totp_attempts = 0
+
+        # Zapamiętaj urządzenie jeśli checkbox zaznaczony
+        if getattr(self, "_trust_device_cb", None) and self._trust_device_cb.isChecked():
+            try:
+                import keyring
+                token = self.db.add_trusted_device(user)
+                keyring.set_password("AegisVault.trusted", user.username, token)
+            except Exception:
+                pass
+
         self._complete_login(user, self._temp_password)
 
     def _on_register(self):
@@ -1164,7 +1269,10 @@ class LoginWindow(QMainWindow):
         kdf_v = user.kdf_version if user.kdf_version is not None else KDF_PBKDF2
         self.crypto = CryptoManager(master_password, user.salt, kdf_version=kdf_v)
         self.db.log_event(user, "login_ok")
-        self._fade_and_close()
+        if self._embedded:
+            self.login_success.emit(user, self.crypto, self.db)
+        else:
+            self._fade_and_close()
 
     def _fade_and_close(self):
         """Płynne zanikanie przed zamknięciem."""

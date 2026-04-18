@@ -17,3 +17,4 @@ winrt-Windows.Security.Credentials.UI>=3.2.1; sys_platform == "win32"
 winrt-Windows.Foundation>=3.2.1; sys_platform == "win32"
 pynput>=1.7.6
 rapidfuzz>=3.0.0
+pykeepass>=4.0.0

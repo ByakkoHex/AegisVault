@@ -62,6 +62,7 @@ from gui_qt.dialogs        import show_error, show_info, show_success, ask_yes_n
 from gui_qt.toast          import ToastManager
 from gui_qt.app            import apply_theme, get_app
 from gui_qt.style          import build_qss
+from utils.i18n            import t
 
 logger = get_logger(__name__)
 
@@ -150,7 +151,7 @@ class PasswordFormDialog(QDialog):
         self.entry  = entry
         self.result = False
 
-        self.setWindowTitle("Edytuj hasło" if entry else "Dodaj nowe hasło")
+        self.setWindowTitle(t("form.title_edit") if entry else t("form.title_add"))
         self.setFixedWidth(480)
         self.setMinimumHeight(560)
         _p    = PrefsManager()
@@ -214,7 +215,7 @@ class PasswordFormDialog(QDialog):
         vl.setContentsMargins(20, 16, 20, 16)
         vl.setSpacing(8)
 
-        title_lbl = QLabel("Edytuj hasło" if entry else "Dodaj hasło")
+        title_lbl = QLabel(t("form.header_edit") if entry else t("form.header_add"))
         title_lbl.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {text_col};")
         vl.addWidget(title_lbl)
 
@@ -235,8 +236,8 @@ class PasswordFormDialog(QDialog):
         fl.setSpacing(6)
 
         # Pola
-        self._title_e    = self._field(fl, "Nazwa serwisu", "np. Gmail, GitHub...")
-        self._username_e = self._field(fl, "Login / Email", "Login lub email...")
+        self._title_e    = self._field(fl, t("form.field_service"), t("form.placeholder_service"))
+        self._username_e = self._field(fl, t("form.field_login"), t("form.placeholder_login"))
 
         _lbl_col  = "#aaaaaa" if dark else "#555555"
         _bar_bg   = "#3a3a3a" if dark else "#e0e0e0"
@@ -251,7 +252,7 @@ class PasswordFormDialog(QDialog):
             )
             return l
 
-        fl.addWidget(_section_label("Hasło"))
+        fl.addWidget(_section_label(t("form.field_password")))
         pwd_row = QWidget()
         pwd_row.setStyleSheet("background: transparent;")
         prl = QHBoxLayout(pwd_row)
@@ -259,7 +260,7 @@ class PasswordFormDialog(QDialog):
         prl.setSpacing(6)
         self._pwd_e = QLineEdit()
         self._pwd_e.setEchoMode(QLineEdit.EchoMode.Password)
-        self._pwd_e.setPlaceholderText("Hasło...")
+        self._pwd_e.setPlaceholderText(t("form.placeholder_pass"))
         self._pwd_e.setFixedHeight(40)
         self._pwd_e.setStyleSheet(
             f"background: {bg_input}; color: {text_col}; "
@@ -283,7 +284,7 @@ class PasswordFormDialog(QDialog):
         arl = QHBoxLayout(action_row)
         arl.setContentsMargins(0, 2, 0, 2)
         arl.setSpacing(8)
-        gen_btn = QPushButton("⚡ Generuj")
+        gen_btn = QPushButton(t("form.generate"))
         gen_btn.setFixedHeight(38)
         gen_btn.setStyleSheet(
             f"background: {'#1a3a5c' if dark else '#ddeeff'}; "
@@ -293,7 +294,7 @@ class PasswordFormDialog(QDialog):
         )
         gen_btn.clicked.connect(self._generate)
         arl.addWidget(gen_btn)
-        hibp_btn = QPushButton("🔍 Sprawdź wyciek")
+        hibp_btn = QPushButton(t("form.check_leak"))
         hibp_btn.setFixedHeight(38)
         hibp_btn.setStyleSheet(
             f"background: {'#2a1a00' if dark else '#fff3e0'}; "
@@ -328,9 +329,9 @@ class PasswordFormDialog(QDialog):
 
         self._pwd_e.textChanged.connect(self._update_strength)
 
-        self._url_e = self._field(fl, "URL (opcjonalnie)", "https://...")
+        self._url_e = self._field(fl, t("form.field_url"), "https://...")
 
-        fl.addWidget(_section_label("Kategoria"))
+        fl.addWidget(_section_label(t("form.field_category")))
         self._cat_combo = QComboBox()
         all_cats = db.get_all_categories(user)
         self._cat_combo.addItems(all_cats)
@@ -346,9 +347,9 @@ class PasswordFormDialog(QDialog):
         )
         fl.addWidget(self._cat_combo)
 
-        self._expires_e = self._field(fl, "Data wygaśnięcia (opcjonalnie)", "2026-12-31")
+        self._expires_e = self._field(fl, t("form.field_expires"), "2026-12-31")
 
-        fl.addWidget(_section_label("Notatki"))
+        fl.addWidget(_section_label(t("form.field_notes")))
         self._notes_e = QTextEdit()
         self._notes_e.setFixedHeight(80)
         self._notes_e.setStyleSheet(
@@ -359,7 +360,7 @@ class PasswordFormDialog(QDialog):
         fl.addWidget(self._notes_e)
 
         # OTP Secret
-        fl.addWidget(_section_label("Klucz OTP (opcjonalnie)"))
+        fl.addWidget(_section_label(t("form.field_otp")))
         otp_row = QWidget()
         otp_row.setStyleSheet("background: transparent;")
         otprl = QHBoxLayout(otp_row)
@@ -387,7 +388,7 @@ class PasswordFormDialog(QDialog):
         self._otp_e.textChanged.connect(self._update_otp_preview)
 
         # ── Własne pola ───────────────────────────────────────────────
-        fl.addWidget(_section_label("Własne pola (opcjonalnie)"))
+        fl.addWidget(_section_label(t("form.field_custom")))
 
         self._fields_container = QWidget()
         self._fields_container.setStyleSheet("background: transparent;")
@@ -397,7 +398,7 @@ class PasswordFormDialog(QDialog):
         fl.addWidget(self._fields_container)
         self._custom_field_rows: list[tuple] = []  # (name_edit, value_edit, row_widget)
 
-        add_field_btn = QPushButton("+ Dodaj pole")
+        add_field_btn = QPushButton(t("form.add_field"))
         add_field_btn.setFixedHeight(32)
         add_field_btn.setStyleSheet(
             f"background: transparent; border: 1.5px dashed {bdr}; color: {lbl_col}; "
@@ -414,7 +415,7 @@ class PasswordFormDialog(QDialog):
         btn_row = QWidget()
         brl = QHBoxLayout(btn_row)
         brl.setContentsMargins(0, 4, 0, 0)
-        cancel = QPushButton("Anuluj")
+        cancel = QPushButton(t("form.cancel"))
         cancel.setFixedHeight(42)
         cancel.setStyleSheet(
             f"background: transparent; border: 1.5px solid {bdr}; "
@@ -422,7 +423,7 @@ class PasswordFormDialog(QDialog):
         )
         cancel.clicked.connect(self.reject)
         brl.addWidget(cancel)
-        save_btn = QPushButton("Zapisz")
+        save_btn = QPushButton(t("form.save"))
         save_btn.setFixedHeight(42)
         save_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 10px; font-size: 13px; font-weight: bold;")
         save_btn.clicked.connect(self._save)
@@ -517,12 +518,12 @@ class PasswordFormDialog(QDialog):
         )
 
         name_e = QLineEdit(name)
-        name_e.setPlaceholderText("Nazwa pola")
+        name_e.setPlaceholderText(t("form.field_name_ph"))
         name_e.setFixedHeight(36)
         name_e.setStyleSheet(_field_style)
 
         value_e = QLineEdit(value)
-        value_e.setPlaceholderText("Wartość")
+        value_e.setPlaceholderText(t("form.field_value_ph"))
         value_e.setFixedHeight(36)
         value_e.setStyleSheet(_field_style)
 
@@ -887,7 +888,7 @@ class NoteFormDialog(QDialog):
         self.entry  = entry
         self.result = False
 
-        self.setWindowTitle("Edytuj notatkę" if entry else "Nowa notatka")
+        self.setWindowTitle(t("form.note_title_edit") if entry else t("form.note_title_add"))
         self.setFixedWidth(460)
         self.setMinimumHeight(400)
 
@@ -917,7 +918,7 @@ class NoteFormDialog(QDialog):
         vl.setContentsMargins(20, 16, 20, 16)
         vl.setSpacing(8)
 
-        title_lbl = QLabel("Edytuj notatkę" if entry else "Nowa notatka")
+        title_lbl = QLabel(t("form.note_title_edit") if entry else t("form.note_title_add"))
         title_lbl.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {text_col};")
         vl.addWidget(title_lbl)
 
@@ -928,11 +929,11 @@ class NoteFormDialog(QDialog):
         vl.addWidget(sep)
 
         # Tytuł
-        lbl_t = QLabel("TYTUŁ")
+        lbl_t = QLabel(t("form.note_field_title"))
         lbl_t.setStyleSheet(f"color: {lbl_col}; font-size: 11px; font-weight: 600;")
         vl.addWidget(lbl_t)
         self._title_e = QLineEdit()
-        self._title_e.setPlaceholderText("Tytuł notatki...")
+        self._title_e.setPlaceholderText(t("form.note_placeholder_title"))
         self._title_e.setFixedHeight(40)
         self._title_e.setStyleSheet(
             f"background: {bg_input}; color: {text_col}; "
@@ -941,11 +942,11 @@ class NoteFormDialog(QDialog):
         vl.addWidget(self._title_e)
 
         # Treść
-        lbl_c = QLabel("TREŚĆ")
+        lbl_c = QLabel(t("form.note_field_content"))
         lbl_c.setStyleSheet(f"color: {lbl_col}; font-size: 11px; font-weight: 600;")
         vl.addWidget(lbl_c)
         self._content_e = QTextEdit()
-        self._content_e.setPlaceholderText("Zawartość notatki...")
+        self._content_e.setPlaceholderText(t("form.note_placeholder_content"))
         self._content_e.setMinimumHeight(180)
         self._content_e.setStyleSheet(
             f"background: {bg_input}; color: {text_col}; "
@@ -957,7 +958,7 @@ class NoteFormDialog(QDialog):
         btn_row = QWidget()
         brl = QHBoxLayout(btn_row)
         brl.setContentsMargins(0, 4, 0, 0)
-        cancel = QPushButton("Anuluj")
+        cancel = QPushButton(t("form.cancel"))
         cancel.setFixedHeight(42)
         cancel.setStyleSheet(
             f"background: transparent; border: 1.5px solid {bdr}; "
@@ -965,7 +966,7 @@ class NoteFormDialog(QDialog):
         )
         cancel.clicked.connect(self.reject)
         brl.addWidget(cancel)
-        save_btn = QPushButton("Zapisz")
+        save_btn = QPushButton(t("form.save"))
         save_btn.setFixedHeight(42)
         save_btn.setStyleSheet(
             f"background: {accent}; color: white; border-radius: 10px; "
@@ -1413,9 +1414,9 @@ class PasswordRowWidget(QFrame):
             trl = QHBoxLayout(title_row)
             trl.setContentsMargins(0, 0, 0, 0)
             trl.setSpacing(6)
-            t = QLabel(entry.title or "—")
-            t.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {_text_col}; background: transparent; border: none;")
-            trl.addWidget(t)
+            title_lbl = QLabel(entry.title or "—")
+            title_lbl.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {_text_col}; background: transparent; border: none;")
+            trl.addWidget(title_lbl)
             if entry.username:
                 u = QLabel(f"  ·  {entry.username}")
                 u.setStyleSheet("font-size: 11px; color: #888; background: transparent; border: none;")
@@ -1428,14 +1429,14 @@ class PasswordRowWidget(QFrame):
             trl = QHBoxLayout(title_row)
             trl.setContentsMargins(0, 0, 0, 0)
             trl.setSpacing(6)
-            t = QLabel(entry.title or "—")
-            t.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {_text_col}; background: transparent; border: none;")
-            trl.addWidget(t)
+            title_lbl = QLabel(entry.title or "—")
+            title_lbl.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {_text_col}; background: transparent; border: none;")
+            trl.addWidget(title_lbl)
             # Expiry badge
             exp = getattr(entry, "expiry_status", None)
             if exp in ("expired", "soon"):
                 days = max(0, (entry.expires_at - datetime.now(timezone.utc)).days) if entry.expires_at else 0
-                exp_lbl = QLabel("Wygasłe" if exp == "expired" else f"Za {days}d")
+                exp_lbl = QLabel(t("pw.expired") if exp == "expired" else t("pw.expires_in", n=days))
                 bg_col = "#4a1a1a" if exp == "expired" else "#4a3a00"
                 tc_col = "#ff8080" if exp == "expired" else "#ffcc00"
                 exp_lbl.setStyleSheet(f"background: {bg_col}; color: {tc_col}; border-radius: 4px; font-size: 10px; padding: 1px 5px; border: none;")
@@ -1484,7 +1485,7 @@ class PasswordRowWidget(QFrame):
             f"}}"
             f"QPushButton:hover {{ border-color: #f0a500; color: #f0a500; }}"
         )
-        fav_btn.setToolTip("Dodaj do ulubionych" if not fav_active else "Usuń z ulubionych")
+        fav_btn.setToolTip(t("pw.fav_add") if not fav_active else t("pw.fav_remove"))
         fav_btn.clicked.connect(self._toggle_fav)
         brl.addWidget(fav_btn)
 
@@ -1506,7 +1507,7 @@ class PasswordRowWidget(QFrame):
             return b
 
         # ── Kopiuj hasło ─────────────────────────────────────────────
-        _action_btn("📋", "📋 Kopiuj", accent, "#ffffff", self._copy, "Kopiuj hasło (Ctrl+C)")
+        _action_btn("📋", t("pw.copy"), accent, "#ffffff", self._copy, "Kopiuj hasło (Ctrl+C)")
 
         # ── Kopiuj login ─────────────────────────────────────────────
         _bg_green = "#1e3a1e" if self._dark else "#d4f0d4"
@@ -1558,10 +1559,10 @@ class PasswordRowWidget(QFrame):
         # ── Edytuj ───────────────────────────────────────────────────
         _bg_edit = "#2a2a2a" if self._dark else "#e8e8e8"
         _fg_edit = "#cccccc" if self._dark else "#444444"
-        _action_btn("✎", "✎ Edytuj", _bg_edit, _fg_edit, self._edit, "Edytuj wpis")
+        _action_btn("✎", t("pw.edit"), _bg_edit, _fg_edit, self._edit, "Edytuj wpis")
 
         # ── Kosz ─────────────────────────────────────────────────────
-        _action_btn("🗑", "🗑 Kosz", "#3a1a1a" if self._dark else "#fde8e8",
+        _action_btn("🗑", t("pw.trash"), "#3a1a1a" if self._dark else "#fde8e8",
                     "#ff7070" if self._dark else "#c0392b", self._trash, "Przenieś do kosza")
 
         rl.addWidget(btns)
@@ -1769,12 +1770,17 @@ class MainWindow(QMainWindow):
     _sync_status_sig   = pyqtSignal(bool)
     _score_ready_sig   = pyqtSignal(int)
 
-    def __init__(self, db: DatabaseManager, crypto: CryptoManager, user):
+    # Emitowany przy wylogowaniu w trybie embedded (zamiast zamykania okna)
+    logout_requested   = pyqtSignal()
+
+    def __init__(self, db: DatabaseManager, crypto: CryptoManager, user,
+                 embedded: bool = False):
         super().__init__()
-        self.db     = db
-        self.crypto = crypto
-        self.user   = user
-        self._prefs = PrefsManager()
+        self.db       = db
+        self.crypto   = crypto
+        self.user     = user
+        self._prefs   = PrefsManager()
+        self._embedded = embedded
 
         self._active_category    = "Wszystkie"
         self._compact_mode       = self._prefs.get("compact_mode") or False
@@ -1827,9 +1833,10 @@ class MainWindow(QMainWindow):
         self._sync_status_sig.connect(self._on_sync_status)
         self._score_ready_sig.connect(self._on_score_ready)
 
-        self.setWindowTitle(f"AegisVault — {user.username}")
-        self.resize(960, 660)
-        self.setMinimumSize(800, 520)
+        if not self._embedded:
+            self.setWindowTitle(f"AegisVault — {user.username}")
+            self.resize(960, 660)
+            self.setMinimumSize(800, 520)
 
         self._build_ui()
 
@@ -1977,7 +1984,7 @@ class MainWindow(QMainWindow):
 
         # Szukaj
         self._search_entry = QLineEdit()
-        self._search_entry.setPlaceholderText("Szukaj haseł...")
+        self._search_entry.setPlaceholderText(t("main.search_placeholder"))
         self._search_entry.setFixedSize(220, 36)
         self._search_entry.setStyleSheet(f"""
             QLineEdit {{
@@ -2002,7 +2009,7 @@ class MainWindow(QMainWindow):
         tl.addWidget(self._sync_dot)
 
         # Update badge (ukryty dopóki nie ma aktualizacji)
-        self._update_btn = QPushButton("↑  Nowa wersja")
+        self._update_btn = QPushButton(t("main.new_version"))
         self._update_btn.setFixedHeight(32)
         self._update_btn.setStyleSheet("""
             QPushButton {
@@ -2029,7 +2036,7 @@ class MainWindow(QMainWindow):
         self._theme_btn = QPushButton("🌙" if dark else "☀")
         self._theme_btn.setFixedSize(36, 36)
         self._theme_btn.setStyleSheet(
-            f"background: {_blend(accent, '#1e1e1e', 0.22)}; border: 1px solid {accent}; "
+            f"background: {_blend(accent, bg, 0.22)}; border: 1px solid {accent}; "
             f"border-radius: 18px; font-size: 16px; color: {accent}; "
             f"font-family: 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', sans-serif; "
             f"padding: 0; min-height: 0;"
@@ -2045,7 +2052,7 @@ class MainWindow(QMainWindow):
                 background: transparent; border: 1px solid {accent};
                 border-radius: 18px; color: {accent}; font-size: 13px; padding: 0 14px;
             }}
-            QPushButton:hover {{ background: {_blend(accent, '#1e1e1e', 0.15)}; }}
+            QPushButton:hover {{ background: {_blend(accent, bg, 0.15)}; }}
         """)
         self.user_btn.clicked.connect(self._toggle_user_menu)
         tl.addWidget(self.user_btn)
@@ -2106,20 +2113,20 @@ class MainWindow(QMainWindow):
         toll = QHBoxLayout(toolbar)
         toll.setContentsMargins(16, 8, 16, 8)
 
-        self._count_lbl = QLabel("0 haseł")
+        self._count_lbl = QLabel(t("main.n_passwords", n=0))
         self._count_lbl.setStyleSheet(f"color: {'#888' if dark else '#666'}; font-size: 12px; background: transparent; border: none;")
         toll.addWidget(self._count_lbl)
         toll.addStretch()
 
         # Sort combobox
         _sort_opts = [
-            ("name_asc",      "Nazwa A→Z"),
-            ("name_desc",     "Nazwa Z→A"),
-            ("used_desc",     "Ostatnio użyte"),
-            ("strength_desc", "Siła ↓"),
-            ("strength_asc",  "Siła ↑"),
-            ("created_desc",  "Najnowsze"),
-            ("created_asc",   "Najstarsze"),
+            ("name_asc",      t("main.sort_name_asc")),
+            ("name_desc",     t("main.sort_name_desc")),
+            ("used_desc",     t("main.sort_used_desc")),
+            ("strength_desc", t("main.sort_strength_desc")),
+            ("strength_asc",  t("main.sort_strength_asc")),
+            ("created_desc",  t("main.sort_created_desc")),
+            ("created_asc",   t("main.sort_created_asc")),
         ]
         self._sort_combo = QComboBox()
         self._sort_combo.setFixedHeight(28)
@@ -2146,14 +2153,14 @@ class MainWindow(QMainWindow):
         toll.addSpacing(12)
 
         # Widok
-        self._view_btn = QPushButton("Kompaktowy" if self._compact_mode else "Normalny")
+        self._view_btn = QPushButton(t("main.view_compact") if self._compact_mode else t("main.view_normal"))
         self._view_btn.setFixedHeight(32)
         self._view_btn.setStyleSheet(f"background: {'#2a2a2a' if dark else '#e8e8e8'}; color: {'#f0f0f0' if dark else '#1a1a1a'}; border-radius: 8px; font-size: 12px; padding: 0 12px; border: none;")
         self._view_btn.clicked.connect(self._toggle_compact)
         toll.addWidget(self._view_btn)
 
         # Dodaj hasło / notatkę (zależnie od aktywnej kategorii)
-        self._add_btn = QPushButton("+ Dodaj")
+        self._add_btn = QPushButton(t("main.btn_add"))
         self._add_btn.setFixedHeight(32)
         self._add_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 0 12px; border: none;")
         self._add_btn.clicked.connect(self._add_smart)
@@ -2161,7 +2168,7 @@ class MainWindow(QMainWindow):
 
         _btn_bg = "#2a2a2a" if dark else "#e8e8e8"
         _btn_fg = "#f0f0f0" if dark else "#1a1a1a"
-        self._bulk_btn = QPushButton("☑ Zaznacz")
+        self._bulk_btn = QPushButton(t("main.btn_select"))
         self._bulk_btn.setFixedHeight(32)
         self._bulk_btn.setStyleSheet(
             f"background: {_btn_bg}; color: {_btn_fg}; border-radius: 8px; "
@@ -2188,7 +2195,7 @@ class MainWindow(QMainWindow):
         bbl.setContentsMargins(12, 4, 12, 4)
         bbl.setSpacing(8)
 
-        self._bulk_count_lbl = QLabel("0 zaznaczonych")
+        self._bulk_count_lbl = QLabel(t("main.bulk_selected", n=0))
         self._bulk_count_lbl.setStyleSheet(
             f"color: {_bulk_fg}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
         )
@@ -2196,17 +2203,17 @@ class MainWindow(QMainWindow):
         bbl.addStretch()
 
         for txt, cb, sty in [
-            ("Zaznacz wszystkie", self._bulk_select_all,
+            (t("main.bulk_select_all"), self._bulk_select_all,
              f"background: transparent; color: {'#7ab8f5' if dark else '#1a5080'}; "
              f"border: 1px solid {'#444' if dark else '#ccc'}; border-radius: 6px; "
              f"font-size: 11px; padding: 0 8px; min-height: 0;"),
-            ("🗑 Do kosza", self._bulk_trash,
+            (t("main.bulk_delete"), self._bulk_trash,
              f"background: {'#3a1a1a' if dark else '#fde8e8'}; color: {'#ff7070' if dark else '#c0392b'}; "
              f"border: none; border-radius: 6px; font-size: 11px; font-weight: 500; padding: 0 10px; min-height: 0;"),
-            ("📁 Przenieś do...", self._bulk_move,
+            (t("main.bulk_move"), self._bulk_move,
              f"background: {'#1a2a3a' if dark else '#dbeafe'}; color: {'#7ab8f5' if dark else '#1a4a80'}; "
              f"border: none; border-radius: 6px; font-size: 11px; font-weight: 500; padding: 0 10px; min-height: 0;"),
-            ("Anuluj", self._toggle_bulk_mode,
+            (t("main.bulk_cancel"), self._toggle_bulk_mode,
              f"background: transparent; color: {'#aaa' if dark else '#666'}; "
              f"border: 1px solid {'#444' if dark else '#ccc'}; border-radius: 6px; "
              f"font-size: 11px; padding: 0 8px; min-height: 0;"),
@@ -2270,54 +2277,63 @@ class MainWindow(QMainWindow):
         counts["Wszystkie"] = len(all_entries)
 
         # Sekcja KATEGORIE
-        self._cat_section_label(vl, "KATEGORIE", dark)
+        self._cat_section_label(vl, t("sidebar.section_categories"), dark)
         if self._cat_cache is None:
             self._cat_cache = self.db.get_all_categories(self.user)
         cat_icons = self.db.get_category_icons(self.user)
         default_set = set(DEFAULT_CATEGORIES)
 
+        _cat_i18n = {
+            "Wszystkie": "cat.all", "Praca": "cat.work", "Bankowość": "cat.banking",
+            "Rozrywka": "cat.entertainment", "Inne": "cat.other",
+            "Wygasające": "cat.expiring", "Notatki": "cat.notes",
+        }
         self._cat_buttons: dict[str, QPushButton] = {}
         for cat in ["Wszystkie"] + self._cat_cache:
             icon     = CATEGORIES.get(cat, {}).get("icon") or cat_icons.get(cat, "🏷")
             n        = counts.get(cat, 0)
-            label    = f"{icon} {cat}  ({n})" if n > 0 else f"{icon} {cat}"
+            disp     = t(_cat_i18n[cat]) if cat in _cat_i18n else cat
+            label    = f"{icon} {disp}  ({n})" if n > 0 else f"{icon} {disp}"
             deletable = cat not in default_set and cat != "Wszystkie"
             self._add_cat_btn(vl, cat, label, deletable, dark, accent)
 
         # Dodaj kategorię
-        new_cat_btn = self._sidebar_btn("+ Nowa kategoria", "#888", dark)
+        new_cat_btn = self._sidebar_btn(t("sidebar.new_category"), "#888", dark)
         new_cat_btn.clicked.connect(self._add_category)
         vl.addWidget(new_cat_btn)
         self._sidebar_sep(vl, dark)
 
         # SPECJALNE
-        self._cat_section_label(vl, "SPECJALNE", dark)
+        self._cat_section_label(vl, t("sidebar.section_special"), dark)
 
         notes_count = len(self.db.get_all_notes(self.user))
-        notes_txt   = f"📝 Notatki" + (f"  ({notes_count})" if notes_count else "")
+        notes_base  = t("sidebar.notes")
+        notes_txt   = notes_base + (f"  ({notes_count})" if notes_count else "")
         notes_btn   = self._sidebar_btn(notes_txt, "#5a67d8" if notes_count else "#888", dark)
         notes_btn.clicked.connect(lambda: self._filter_category("Notatki"))
         vl.addWidget(notes_btn)
 
         exp_count = len(self.db.get_expiring_passwords(self.user))
-        exp_txt   = f"⏰ Wygasające" + (f"  ({exp_count})" if exp_count else "")
+        exp_base  = t("sidebar.expiring")
+        exp_txt   = exp_base + (f"  ({exp_count})" if exp_count else "")
         exp_btn   = self._sidebar_btn(exp_txt, "#f0a500" if exp_count else "#888", dark)
         exp_btn.clicked.connect(lambda: self._filter_category("Wygasające"))
         vl.addWidget(exp_btn)
 
         trash_count = len(self.db.get_trashed_passwords(self.user))
-        trash_txt   = f"🗑️ Kosz" + (f"  ({trash_count})" if trash_count else "")
+        trash_base  = t("sidebar.trash")
+        trash_txt   = trash_base + (f"  ({trash_count})" if trash_count else "")
         trash_btn   = self._sidebar_btn(trash_txt, "#e05252" if trash_count else "#888", dark)
         trash_btn.clicked.connect(self._open_trash)
         vl.addWidget(trash_btn)
         self._sidebar_sep(vl, dark)
 
         # BACKUP
-        self._cat_section_label(vl, "BACKUP", dark)
+        self._cat_section_label(vl, t("sidebar.section_backup"), dark)
         for txt, cmd in [
-            ("📤 Eksport",           self._export),
-            ("📥 Import .aegis",     self._import_aegis),
-            ("📥 Import zewnętrzny", self._import_external),
+            (t("sidebar.export"),          self._export),
+            (t("sidebar.import_aegis"),    self._import_aegis),
+            (t("sidebar.import_external"), self._import_external),
         ]:
             b = self._sidebar_btn(txt, "#888", dark)
             b.clicked.connect(cmd)
@@ -2325,7 +2341,7 @@ class MainWindow(QMainWindow):
         self._sidebar_sep(vl, dark)
 
         # GENERATOR
-        self._cat_section_label(vl, "GENERATOR", dark)
+        self._cat_section_label(vl, t("sidebar.section_generator"), dark)
         self._build_gen_panel(vl, dark, accent)
 
         vl.addStretch()
@@ -2426,8 +2442,8 @@ class MainWindow(QMainWindow):
         trl.setSpacing(2)
         _tab_active   = f"background: {accent}; color: white; border-radius: 5px; font-size: 10px; font-weight: bold; border: none; padding: 2px 6px; min-height: 0;"
         _tab_inactive = f"background: {'#333' if dark else '#d0d0d0'}; color: {'#aaa' if dark else '#666'}; border-radius: 5px; font-size: 10px; border: none; padding: 2px 6px; min-height: 0;"
-        self._tab_pwd  = QPushButton("Losowe")
-        self._tab_dice = QPushButton("Passphrase")
+        self._tab_pwd  = QPushButton(t("gen.random"))
+        self._tab_dice = QPushButton(t("gen.passphrase"))
         for b in (self._tab_pwd, self._tab_dice):
             b.setFixedHeight(22)
             trl.addWidget(b)
@@ -2449,7 +2465,7 @@ class MainWindow(QMainWindow):
         len_row.setStyleSheet("background: transparent; border: none;")
         lrl = QHBoxLayout(len_row)
         lrl.setContentsMargins(0, 0, 0, 0)
-        len_lbl = QLabel("Długość:")
+        len_lbl = QLabel(t("gen.length"))
         len_lbl.setStyleSheet(f"color: {'#f0f0f0' if dark else '#1a1a1a'}; font-size: 11px; background: transparent; border: none;")
         lrl.addWidget(len_lbl)
         lrl.addStretch()
@@ -2475,7 +2491,7 @@ class MainWindow(QMainWindow):
             QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid {'#666' if dark else '#aaa'}; border-radius: 3px; background: {'#2a2a2a' if dark else '#fff'}; }}
             QCheckBox::indicator:checked {{ background: {accent}; border-color: {accent}; }}
         """
-        for label, attr in [("Duże litery", "_gen_upper"), ("Cyfry", "_gen_digits"), ("Znaki specjalne", "_gen_special")]:
+        for label, attr in [(t("gen.uppercase"), "_gen_upper"), (t("gen.digits"), "_gen_digits"), (t("gen.special"), "_gen_special")]:
             cb = QCheckBox(label)
             cb.setChecked(getattr(self, attr))
             cb.setStyleSheet(_cb_sty)
@@ -2490,12 +2506,12 @@ class MainWindow(QMainWindow):
         brl1 = QHBoxLayout()
         brl1.setContentsMargins(0, 0, 0, 0)
         brl1.setSpacing(4)
-        gen_btn = QPushButton("Generuj")
+        gen_btn = QPushButton(t("gen.generate"))
         gen_btn.setFixedHeight(28)
         gen_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; padding: 0 6px; min-height: 0;")
         gen_btn.clicked.connect(self._gen_generate)
         brl1.addWidget(gen_btn)
-        copy_btn = QPushButton("Kopiuj")
+        copy_btn = QPushButton(t("gen.copy"))
         copy_btn.setFixedHeight(28)
         copy_btn.setStyleSheet(f"background: {'#2a2a2a' if dark else '#e0e0e0'}; color: {'#f0f0f0' if dark else '#1a1a1a'}; border-radius: 6px; font-size: 11px; border: none; padding: 0 6px; min-height: 0;")
         copy_btn.clicked.connect(self._gen_copy)
@@ -2514,7 +2530,7 @@ class MainWindow(QMainWindow):
         cnt_row.setStyleSheet("background: transparent; border: none;")
         crl = QHBoxLayout(cnt_row)
         crl.setContentsMargins(0, 0, 0, 0)
-        cnt_lbl = QLabel("Liczba słów:")
+        cnt_lbl = QLabel(t("gen.word_count"))
         cnt_lbl.setStyleSheet(f"color: {'#f0f0f0' if dark else '#1a1a1a'}; font-size: 11px; background: transparent; border: none;")
         crl.addWidget(cnt_lbl)
         crl.addStretch()
@@ -2536,10 +2552,10 @@ class MainWindow(QMainWindow):
         sepl = QHBoxLayout(sep_row)
         sepl.setContentsMargins(0, 0, 0, 0)
         sepl.setSpacing(4)
-        sepl.addWidget(QLabel("Separator:") if False else
-                       (lambda lbl: (lbl.setStyleSheet(f"color: {'#d0d0d0' if dark else '#444'}; font-size: 11px; background: transparent; border: none;"), lbl)[1])(QLabel("Separator:")))
+        sepl.addWidget(QLabel("X") if False else
+                       (lambda lbl: (lbl.setStyleSheet(f"color: {'#d0d0d0' if dark else '#444'}; font-size: 11px; background: transparent; border: none;"), lbl)[1])(QLabel(t("gen.separator"))))
         self._dice_sep_combo = QComboBox()
-        self._dice_sep_combo.addItems(["- myślnik", "  spacja", ". kropka", "_ podkreślnik"])
+        self._dice_sep_combo.addItems([t("gen.sep_dash"), t("gen.sep_space"), t("gen.sep_dot"), t("gen.sep_underscore")])
         self._dice_sep_combo.setFixedHeight(22)
         self._dice_sep_combo.setStyleSheet(
             f"QComboBox {{ background: {'#333' if dark else '#d8d8d8'}; color: {'#f0f0f0' if dark else '#1a1a1a'}; border-radius: 4px; font-size: 10px; border: none; padding: 0 4px; }}"
@@ -2549,7 +2565,7 @@ class MainWindow(QMainWindow):
         sepl.addWidget(self._dice_sep_combo)
         dl.addWidget(sep_row)
 
-        cap_cb = QCheckBox("Pierwsza litera wielka")
+        cap_cb = QCheckBox(t("gen.capitalize"))
         cap_cb.setChecked(self._dice_cap)
         cap_cb.setStyleSheet(_cb_sty)
         cap_cb.stateChanged.connect(lambda s: setattr(self, "_dice_cap", bool(s)))
@@ -2568,12 +2584,12 @@ class MainWindow(QMainWindow):
         brl2 = QHBoxLayout()
         brl2.setContentsMargins(0, 0, 0, 0)
         brl2.setSpacing(4)
-        dice_gen_btn = QPushButton("Generuj")
+        dice_gen_btn = QPushButton(t("gen.generate"))
         dice_gen_btn.setFixedHeight(28)
         dice_gen_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; padding: 0 6px; min-height: 0;")
         dice_gen_btn.clicked.connect(self._dice_generate)
         brl2.addWidget(dice_gen_btn)
-        dice_copy_btn = QPushButton("Kopiuj")
+        dice_copy_btn = QPushButton(t("gen.copy"))
         dice_copy_btn.setFixedHeight(28)
         dice_copy_btn.setStyleSheet(f"background: {'#2a2a2a' if dark else '#e0e0e0'}; color: {'#f0f0f0' if dark else '#1a1a1a'}; border-radius: 6px; font-size: 11px; border: none; padding: 0 6px; min-height: 0;")
         dice_copy_btn.clicked.connect(self._dice_copy)
@@ -3109,17 +3125,106 @@ class MainWindow(QMainWindow):
         self._clipboard_qt_timer.stop()
         self._clipboard_lbl.setText("")
 
+        if self.db.has_pin(self.user):
+            self._lock_pin_dialog()
+        else:
+            self._lock_master_dialog()
+
+    def _lock_pin_dialog(self):
+        """Ekran PIN-u (quick unlock). Po 3 błędach → fallback na masterhasło."""
+        accent = self._prefs.get_accent()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Odblokuj aplikację")
+        dlg.setFixedSize(380, 340)
+        dlg.setWindowFlags(
+            Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint
+        )
+        dlg.reject = lambda: None
+        dlg.setStyleSheet("QDialog { background: #1e1e1e; color: #f0f0f0; } QLabel { background: transparent; border: none; color: #f0f0f0; }")
+        vl = QVBoxLayout(dlg)
+        vl.setContentsMargins(30, 20, 30, 20)
+        vl.setSpacing(10)
+
+        icon = QLabel("🔒")
+        icon.setStyleSheet("font-size: 48px;")
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        vl.addWidget(icon)
+
+        vl.addWidget(self._empty_lbl("Podaj PIN aby odblokować", 15, True))
+
+        pin_entry = QLineEdit()
+        pin_entry.setEchoMode(QLineEdit.EchoMode.Password)
+        pin_entry.setPlaceholderText("••••••")
+        pin_entry.setMaxLength(6)
+        pin_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pin_entry.setFixedHeight(52)
+        pin_entry.setStyleSheet(
+            "background: #2a2a2a; color: #f0f0f0; border: 1px solid #444;"
+            "border-radius: 10px; padding: 0 12px; font-size: 22px; letter-spacing: 8px;"
+        )
+        vl.addWidget(pin_entry)
+
+        msg_lbl = QLabel("")
+        msg_lbl.setStyleSheet("color: #e53e3e; font-size: 11px;")
+        msg_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        vl.addWidget(msg_lbl)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        fallback_btn = QPushButton("Użyj hasła masterowego")
+        fallback_btn.setFixedHeight(36)
+        fallback_btn.setStyleSheet(
+            "background: #2a2a2a; color: #aaa; border: 1px solid #444;"
+            "border-radius: 8px; font-size: 11px;"
+        )
+        unlock_btn = QPushButton("Odblokuj")
+        unlock_btn.setFixedHeight(36)
+        unlock_btn.setStyleSheet(
+            f"background: {accent}; color: white; border: none;"
+            "border-radius: 8px; font-size: 13px; font-weight: bold;"
+        )
+        unlock_btn.setDefault(True)
+        btn_row.addWidget(fallback_btn)
+        btn_row.addWidget(unlock_btn)
+        vl.addLayout(btn_row)
+
+        attempts = [0]
+
+        def _try_pin():
+            pin = pin_entry.text().strip()
+            if self.db.verify_pin(self.user, pin):
+                self._locked = False
+                self._last_activity = time.time()
+                dlg.accept()
+                self._lock_timer.start()
+            else:
+                attempts[0] += 1
+                pin_entry.clear()
+                shake(pin_entry)
+                if attempts[0] >= 3:
+                    dlg.accept()
+                    self._lock_master_dialog()
+                else:
+                    msg_lbl.setText(f"Nieprawidłowy PIN. Pozostało prób: {3 - attempts[0]}")
+
+        unlock_btn.clicked.connect(_try_pin)
+        pin_entry.returnPressed.connect(_try_pin)
+        fallback_btn.clicked.connect(lambda: (dlg.accept(), self._lock_master_dialog()))
+
+        dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
+        QTimer.singleShot(200, pin_entry.setFocus)
+        dlg.exec()
+
+    def _lock_master_dialog(self):
+        """Ekran masterhasła przy blokadzie."""
+        accent = self._prefs.get_accent()
         dlg = QDialog(self)
         dlg.setWindowTitle("Aplikacja zablokowana")
         dlg.setFixedSize(440, 300)
         dlg.setWindowFlags(
-            Qt.WindowType.Dialog
-            | Qt.WindowType.CustomizeWindowHint
-            | Qt.WindowType.WindowTitleHint
-            # Bez WindowCloseButtonHint → brak przycisku X
-            # Bez WindowStaysOnTopHint → nie wyskakuje nad inne aplikacje
+            Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint
         )
-        dlg.reject = lambda: None  # blokuj Escape
+        dlg.reject = lambda: None
         dlg.setStyleSheet("QDialog { background: #1e1e1e; color: #f0f0f0; } QLabel { background: transparent; border: none; color: #f0f0f0; }")
         vl = QVBoxLayout(dlg)
         vl.setContentsMargins(30, 20, 30, 20)
@@ -3144,7 +3249,6 @@ class MainWindow(QMainWindow):
         msg_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         vl.addWidget(msg_lbl)
 
-        accent = self._prefs.get_accent()
         unlock_btn = QPushButton("Odblokuj")
         unlock_btn.setFixedHeight(42)
         unlock_btn.setStyleSheet(f"background: {accent}; color: white; border-radius: 10px; font-size: 13px; font-weight: bold; border: none;")
@@ -3179,6 +3283,7 @@ class MainWindow(QMainWindow):
             on_close=self._close_settings,
             on_logout=self._logout,
             on_theme_change=self._on_theme_change,
+            on_language_change=self._on_language_change,
         )
         # Fall back to main-window dimensions if centralWidget hasn't been
         # laid out yet (returns 0 during the post-rebuild deferred call).
@@ -3198,6 +3303,9 @@ class MainWindow(QMainWindow):
     def _close_settings(self):
         if self._settings_panel:
             self._settings_panel.slide_out()
+
+    def _on_language_change(self, lang: str):
+        QTimer.singleShot(0, self._rebuild_and_reopen_settings)
 
     def _on_theme_change(self, theme_id: str):
         accent = self._prefs.get_accent()
@@ -3233,6 +3341,9 @@ class MainWindow(QMainWindow):
 
         # Zniszcz stary panel ustawień (zostanie odtworzony przy kolejnym otwarciu)
         self._settings_panel = None
+        # Stary popup menu mógł zostać zniszczony razem ze starym centralWidget —
+        # zerujemy referencję żeby uniknąć RuntimeError przy następnym kliknięciu.
+        self._user_menu_widget = None
 
         self._active_category = cat
         self._compact_mode    = compact
@@ -3275,13 +3386,14 @@ class MainWindow(QMainWindow):
     def _toggle_user_menu(self):
         dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"
         accent = self._prefs.get_accent()
-        if hasattr(self, "_user_menu_widget") and self._user_menu_widget:
-            try:
-                self._user_menu_widget.close()
+        try:
+            widget = getattr(self, "_user_menu_widget", None)
+            if widget is not None:
+                widget.close()
                 self._user_menu_widget = None
-            except Exception:
-                pass
-            return
+                return
+        except Exception:
+            self._user_menu_widget = None
 
         menu = QFrame(self.centralWidget())
         menu.setWindowFlags(Qt.WindowType.Popup)
@@ -3293,10 +3405,10 @@ class MainWindow(QMainWindow):
 
         for text, callback in [
             (f"👤  {self.user.username}", None),
-            ("⚙️  Ustawienia", self._open_settings),
-            ("🔒  Zablokuj", self._lock),
-            ("🔄  Synchronizacja", self._open_sync),
-            ("🚪  Wyloguj", self._logout),
+            (t("main.menu_settings"), self._open_settings),
+            (t("main.menu_lock"),     self._lock),
+            (t("main.menu_sync"),     self._open_sync),
+            (t("main.menu_logout"),   self._logout),
         ]:
             btn = QPushButton(text)
             btn.setFixedHeight(38)
@@ -3360,27 +3472,29 @@ class MainWindow(QMainWindow):
             self._toast.show("Brak widocznych haseł do Auto-type", "warning")
 
     def _duplicate_first(self):
+        # Preferuj zaznaczony wpis, fallback na pierwszy widoczny
+        entry = None
         for i in range(self._list_vl.count()):
             item = self._list_vl.itemAt(i)
-            if item and item.widget() and isinstance(item.widget(), PasswordRowWidget):
-                entry = item.widget().entry
-                try:
-                    plain = self.db.decrypt_password(entry, self.crypto)
-                    self.db.add_password(
-                        self.user, self.crypto,
-                        title=f"Kopia — {entry.title}",
-                        username=entry.username or "",
-                        plaintext_password=plain,
-                        url=entry.url or "", notes=entry.notes or "",
-                        category=entry.category or "Inne",
-                        expires_at=entry.expires_at,
-                    )
-                    self._refresh()
-                    if self._toast:
-                        self._toast.show(f"Zduplikowano: {entry.title}", "success")
-                except Exception:
-                    pass
-                return
+            w = item.widget() if item else None
+            if not isinstance(w, PasswordRowWidget):
+                continue
+            if entry is None:
+                entry = w.entry   # fallback: pierwszy widoczny
+            if w.entry.id in self._selected_ids:
+                entry = w.entry   # priorytet: zaznaczony
+                break
+        if entry is None:
+            self._toast.show("Brak widocznych haseł do zduplikowania", "warning")
+            return
+        try:
+            new_entry = self.db.duplicate_password(entry, self.crypto)
+            self.db.log_event(self.user, "password_created",
+                              entry_id=new_entry.id, details=f"duplikat: {entry.title}")
+            self._refresh()
+            self._toast.show(f"Zduplikowano: {entry.title}", "success")
+        except Exception as e:
+            self._toast.show(f"Błąd duplikowania: {e}", "error")
 
     def _show_shortcuts(self):
         dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"
@@ -3497,18 +3611,89 @@ class MainWindow(QMainWindow):
 
     def _import_external(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import zewnętrzny", "", "CSV / JSON (*.csv *.json)"
+            self, "Import zewnętrzny", "",
+            "Wszystkie obsługiwane (*.csv *.json *.kdbx);;"
+            "KeePass KDBX (*.kdbx);;"
+            "CSV / JSON (*.csv *.json)"
         )
         if not path:
             return
         try:
             from utils.import_manager import ImportManager
             mgr = ImportManager(self.db, self.crypto, self.user)
-            count = mgr.import_file(path)
+            if path.lower().endswith(".kdbx"):
+                count = self._import_keepass(mgr, path)
+            else:
+                count = mgr.import_file(path)
+            if count is None:
+                return   # anulowano dialog KeePass
             show_success("Import", f"Zaimportowano {count} haseł.", parent=self)
             self._refresh(rebuild_sidebar=True)
         except Exception as e:
             show_error("Błąd importu", str(e), parent=self)
+
+    def _import_keepass(self, mgr, path: str):
+        """Pokazuje dialog hasła KeePass i uruchamia import. Zwraca None gdy anulowano."""
+        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
+                                      QLabel, QLineEdit, QPushButton)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Hasło do bazy KeePass")
+        dlg.setFixedWidth(380)
+        dlg.setStyleSheet("background:#1e1e1e; color:#e0e0e0;")
+
+        vl = QVBoxLayout(dlg)
+        vl.setSpacing(12)
+        vl.setContentsMargins(24, 24, 24, 24)
+
+        icon_lbl = QLabel("🔐 Podaj hasło do bazy KeePass")
+        icon_lbl.setStyleSheet("font-size:14px; font-weight:600;")
+        vl.addWidget(icon_lbl)
+
+        file_lbl = QLabel(path.split("/")[-1].split("\\")[-1])
+        file_lbl.setStyleSheet("font-size:11px; color:#888;")
+        vl.addWidget(file_lbl)
+
+        pwd_edit = QLineEdit()
+        pwd_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        pwd_edit.setPlaceholderText("Hasło do pliku .kdbx...")
+        pwd_edit.setFixedHeight(40)
+        pwd_edit.setStyleSheet(
+            "background:#2a2a2a; border:1px solid #444; border-radius:6px;"
+            "padding:0 10px; font-size:13px; color:#e0e0e0;"
+        )
+        vl.addWidget(pwd_edit)
+
+        hint = QLabel("Pozostaw puste jeśli baza nie ma hasła.")
+        hint.setStyleSheet("font-size:10px; color:#666;")
+        vl.addWidget(hint)
+
+        hl = QHBoxLayout()
+        hl.setSpacing(8)
+        cancel_btn = QPushButton("Anuluj")
+        cancel_btn.setFixedHeight(36)
+        cancel_btn.setStyleSheet(
+            "background:#333; border:1px solid #555; border-radius:6px;"
+            "color:#ccc; font-size:13px;"
+        )
+        ok_btn = QPushButton("Importuj")
+        ok_btn.setFixedHeight(36)
+        ok_btn.setStyleSheet(
+            "background:#4F8EF7; border:none; border-radius:6px;"
+            "color:white; font-size:13px; font-weight:600;"
+        )
+        ok_btn.setDefault(True)
+        hl.addWidget(cancel_btn)
+        hl.addWidget(ok_btn)
+        vl.addLayout(hl)
+
+        cancel_btn.clicked.connect(dlg.reject)
+        ok_btn.clicked.connect(dlg.accept)
+        pwd_edit.returnPressed.connect(dlg.accept)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+
+        return mgr.import_keepass(path, pwd_edit.text())
 
     # ── Security score ────────────────────────────────────────────────
 
@@ -3631,6 +3816,8 @@ class MainWindow(QMainWindow):
     def _logout(self):
         self.logged_out = True
         self._cleanup()
-        self.close()
-        # LoginWindow uruchomi się przez main.py po powrocie
-        QApplication.quit()
+        if self._embedded:
+            self.logout_requested.emit()
+        else:
+            self.close()
+            QApplication.quit()

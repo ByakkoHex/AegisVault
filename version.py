@@ -5,11 +5,23 @@ Zmień APP_VERSION przy każdym wydaniu, aby klienci mogli wykryć aktualizację
 Format: MAJOR.MINOR.PATCH
 """
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.3"
 
 # Historia wersji — lista (wersja, tytuł, [zmiany])
 # Najnowsza wersja na górze.
 VERSION_HISTORY = [
+    (
+        "1.3.3",
+        "Wielojęzyczność EN/PL + splash screen",
+        [
+            "Pełne wsparcie dla języka angielskiego — wszystkie napisy w UI tłumaczą się po zmianie języka",
+            "Splash screen przy starcie aplikacji z paskiem postępu",
+            "Naprawiono: nazwy kategorii, generatora, formularzy i ekranu logowania nie zmieniały języka",
+            "Naprawiono: przyciski toggle (Włączone/Wyłączone) nie reagowały na zmianę języka",
+            "Naprawiono: nazwy kolorów akcentu i dni retencji logów nie były tłumaczone",
+            "macOS: dodano skrypt 'Zezwól na uruchomienie' w DMG usuwający blokadę Gatekeepera",
+        ],
+    ),
     (
         "1.3.0",
         "Nowy interfejs — migracja na PyQt6",

@@ -6,6 +6,7 @@ Obsługiwane formaty:
   - Bitwarden  JSON (items[].login)
   - 1Password  CSV  (Title, Website, Username, Password, Notes, ...)
   - Generic    CSV  (dowolna kombinacja kolumn title/name, url, username/login, password)
+  - KeePass    KDBX (.kdbx v3/v4, wymaga hasła do bazy)
 """
 
 import csv
@@ -69,24 +70,44 @@ def _from_lastpass(content: str) -> List[PasswordItem]:
 def _from_bitwarden(content: str) -> List[PasswordItem]:
     """
     Format Bitwarden JSON:
-    { "items": [ { "name", "login": { "username", "password", "uris": [{"uri"}] }, "notes", "folderId" } ] }
+    { "items": [ { "name", "type", "login": {...}, "secureNote": {...}, "notes", "folderId" } ] }
+    type 1 = Login, type 2 = Secure Note, type 3 = Card, type 4 = Identity (3/4 pomijane).
     """
     data  = json.loads(content)
     items = []
     for item in data.get("items", []):
-        if item.get("type") != 1:   # type 1 = Login
+        item_type = item.get("type")
+        name      = item.get("name", "").strip()
+        if not name:
             continue
-        login = item.get("login") or {}
-        uris  = login.get("uris") or []
-        url   = uris[0].get("uri", "") if uris else ""
-        items.append({
-            "title":    item.get("name", "").strip(),
-            "username": (login.get("username") or "").strip(),
-            "password": (login.get("password") or "").strip(),
-            "url":      url.strip(),
-            "notes":    (item.get("notes") or "").strip(),
-            "category": "Inne",
-        })
+
+        if item_type == 1:  # Login
+            login = item.get("login") or {}
+            uris  = login.get("uris") or []
+            url   = uris[0].get("uri", "") if uris else ""
+            otp   = _parse_otp_secret(login.get("totp") or "")
+            items.append({
+                "title":      name,
+                "username":   (login.get("username") or "").strip(),
+                "password":   (login.get("password") or "").strip(),
+                "url":        url.strip(),
+                "notes":      (item.get("notes") or "").strip(),
+                "category":   "Inne",
+                "otp_secret": otp,
+                "entry_type": "password",
+            })
+        elif item_type == 2:  # Secure Note
+            items.append({
+                "title":      name,
+                "username":   "",
+                "password":   "",
+                "url":        "",
+                "notes":      (item.get("notes") or "").strip(),
+                "category":   "Notatki",
+                "otp_secret": "",
+                "entry_type": "note",
+            })
+        # type 3 (Card) i 4 (Identity) — pomijane, nieobsługiwany typ
     return items
 
 
@@ -159,6 +180,73 @@ def _from_generic_csv(content: str) -> List[PasswordItem]:
 
 
 # ──────────────────────────────────────────────
+# KEEPASS KDBX
+# ──────────────────────────────────────────────
+
+def _from_keepass(filepath: str, kdbx_password: str) -> List[PasswordItem]:
+    """
+    Czyta plik .kdbx (KeePass v3/v4) przy użyciu pykeepass.
+    Grupy KeePass → category (pełna ścieżka, np. "Internet / Praca").
+    Obsługuje OTP przechowywane jako custom property.
+    """
+    try:
+        from pykeepass import PyKeePass
+        from pykeepass.exceptions import CredentialsError
+    except ImportError:
+        raise ValueError(
+            "Brak biblioteki pykeepass.\n"
+            "Zainstaluj: pip install pykeepass"
+        )
+
+    try:
+        kp = PyKeePass(filepath, password=kdbx_password or None)
+    except CredentialsError:
+        raise ValueError("Nieprawidłowe hasło do bazy KeePass.")
+    except Exception as e:
+        raise ValueError(f"Nie można otworzyć bazy KeePass: {e}")
+
+    items: List[PasswordItem] = []
+    for entry in kp.entries:
+        if getattr(entry, "is_a_history_entry", False):
+            continue
+
+        # Spłaszczamy ścieżkę grup → kategoria (pomijamy "Root")
+        path_parts: list[str] = []
+        g = entry.group
+        while g is not None:
+            name = getattr(g, "name", None) or ""
+            if name and name.lower() != "root":
+                path_parts.insert(0, name)
+            g = getattr(g, "parentgroup", None)
+        category = " / ".join(path_parts) if path_parts else "Inne"
+
+        # OTP — KeePass przechowuje w różnych custom properties
+        otp_secret = ""
+        custom = getattr(entry, "custom_properties", {}) or {}
+        for key in ("otp", "TimeOtp-Secret-Base32", "TOTP Seed", "totp_secret", "OTPAuth"):
+            val = custom.get(key, "") or ""
+            if val:
+                otp_secret = _parse_otp_secret(val)
+                break
+
+        title = (entry.title or "").strip()
+        if not title:
+            continue
+
+        items.append({
+            "title":      title,
+            "username":   (entry.username or "").strip(),
+            "password":   (entry.password or "").strip(),
+            "url":        (entry.url or "").strip(),
+            "notes":      (entry.notes or "").strip(),
+            "category":   category,
+            "otp_secret": otp_secret,
+        })
+
+    return items
+
+
+# ──────────────────────────────────────────────
 # DETEKCJA FORMATU
 # ──────────────────────────────────────────────
 
@@ -181,8 +269,9 @@ def _detect_format(content: str, filepath: str) -> str:
 
 def import_file(filepath: str) -> tuple[List[PasswordItem], str]:
     """
-    Wczytuje i parsuje plik eksportu innego menedżera.
+    Wczytuje i parsuje plik eksportu innego menedżera (CSV/JSON).
     Zwraca (lista_wpisów, wykryty_format).
+    Dla plików .kdbx użyj ImportManager.import_keepass().
     Rzuca ValueError jeśli format nieobsługiwany lub plik uszkodzony.
     """
     with open(filepath, "r", encoding="utf-8-sig") as f:
@@ -201,3 +290,46 @@ def import_file(filepath: str) -> tuple[List[PasswordItem], str]:
     if not items:
         raise ValueError("Nie znaleziono żadnych wpisów w pliku.")
     return items, fmt
+
+
+class ImportManager:
+    """Fasada do importowania wpisów do bazy AegisVault."""
+
+    def __init__(self, db, crypto, user):
+        self.db     = db
+        self.crypto = crypto
+        self.user   = user
+
+    def import_file(self, filepath: str) -> int:
+        """Import CSV / JSON — auto-detekcja formatu."""
+        items, _fmt = import_file(filepath)
+        return self._save(items)
+
+    def import_keepass(self, filepath: str, kdbx_password: str) -> int:
+        """Import pliku .kdbx. Rzuca ValueError przy złym haśle."""
+        items = _from_keepass(filepath, kdbx_password)
+        if not items:
+            raise ValueError("Nie znaleziono żadnych wpisów w bazie KeePass.")
+        return self._save(items)
+
+    def _save(self, items: List[PasswordItem]) -> int:
+        count = 0
+        for item in items:
+            entry_type = item.get("entry_type", "password")
+            if entry_type == "note":
+                self.db.add_note(self.user,
+                                 title=item["title"],
+                                 content=item.get("notes", ""))
+            else:
+                self.db.add_password(
+                    self.user, self.crypto,
+                    title=item["title"],
+                    username=item.get("username", ""),
+                    plaintext_password=item.get("password", ""),
+                    url=item.get("url", ""),
+                    notes=item.get("notes", ""),
+                    category=item.get("category", "Inne"),
+                    otp_secret=item.get("otp_secret") or None,
+                )
+            count += 1
+        return count

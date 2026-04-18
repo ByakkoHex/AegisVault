@@ -64,6 +64,10 @@ if sys.platform == "win32":
 
 # ── Hidden imports ────────────────────────────────────────────────────────────
 hidden = [
+    # Lokalizacja (lazy import wewnątrz funkcji — PyInstaller może pominąć)
+    "locales",
+    "locales.pl",
+    "locales.en",
     # GUI
     "PyQt6",
     "PyQt6.QtWidgets",
@@ -201,8 +205,8 @@ elif sys.platform == "darwin":
         icon=icon_path,
         bundle_identifier="pl.aegisvault.AegisVault",
         info_plist={
-            "CFBundleShortVersionString": "1.3.0",
-            "CFBundleVersion": "1.3.0",
+            "CFBundleShortVersionString": "1.3.3",
+            "CFBundleVersion": "1.3.3",
             "NSHighResolutionCapable": True,
         },
     )

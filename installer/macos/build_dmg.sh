@@ -39,6 +39,13 @@ mkdir -p "${STAGING_DIR}"
 cp -R "${APP_PATH}" "${STAGING_DIR}/${APP_NAME}.app"
 ln -s /Applications "${STAGING_DIR}/Applications"
 
+# Dołącz skrypt usuwający kwarantannę Gatekeepera
+ALLOW_SCRIPT="${SCRIPT_DIR}/Zezwól na uruchomienie.command"
+if [ -f "${ALLOW_SCRIPT}" ]; then
+    cp "${ALLOW_SCRIPT}" "${STAGING_DIR}/Zezwól na uruchomienie.command"
+    chmod +x "${STAGING_DIR}/Zezwól na uruchomienie.command"
+fi
+
 # Dołącz README o native host
 cat > "${STAGING_DIR}/README - Integracja z przeglądarką.txt" << 'EOF'
 AegisVault — Integracja z przeglądarką (autouzupełnianie)

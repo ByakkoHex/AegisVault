@@ -50,6 +50,7 @@ from gui_qt.gradient  import AnimatedGradientWidget
 from gui_qt.dialogs   import show_error, show_info, show_success, ask_yes_no
 from gui_qt.app       import apply_theme
 from gui_qt.style     import build_qss
+from utils.i18n       import t
 
 logger = get_logger(__name__)
 
@@ -86,14 +87,16 @@ class SettingsPanel(QWidget):
         on_close,
         on_logout=None,
         on_theme_change=None,
+        on_language_change=None,
     ):
         super().__init__(parent)
-        self.db              = db
-        self.crypto          = crypto
-        self.user            = user
-        self.on_close        = on_close
-        self.on_logout       = on_logout
-        self.on_theme_change = on_theme_change
+        self.db                = db
+        self.crypto            = crypto
+        self.user              = user
+        self.on_close          = on_close
+        self.on_logout         = on_logout
+        self.on_theme_change   = on_theme_change
+        self.on_language_change = on_language_change
         self._prefs          = PrefsManager()
         self._anim: QPropertyAnimation | None = None
 
@@ -187,7 +190,7 @@ class SettingsPanel(QWidget):
         hdr_layout = QHBoxLayout(hdr)
         hdr_layout.setContentsMargins(12, 0, 16, 0)
 
-        back_btn = QPushButton("← Wstecz")
+        back_btn = QPushButton(t("settings.back"))
         back_btn.setFixedHeight(32)
         back_btn.setStyleSheet(f"""
             QPushButton {{
@@ -200,7 +203,7 @@ class SettingsPanel(QWidget):
         back_btn.clicked.connect(self._safe_close)
         hdr_layout.addWidget(back_btn)
 
-        title_lbl = QLabel("Ustawienia")
+        title_lbl = QLabel(t("settings.title"))
         title_lbl.setStyleSheet(
             f"color: {'#f0f0f0' if dark else '#1a1a1a'}; font-size: 18px; font-weight: bold;"
         )
@@ -240,9 +243,9 @@ class SettingsPanel(QWidget):
         self._tab_stack.setStyleSheet("background: transparent;")
 
         for idx, (label, tid) in enumerate([
-            ("Wygląd",           "appearance"),
-            ("Bezpieczeństwo",   "security"),
-            ("System",           "system"),
+            (t("settings.tab_appearance"), "appearance"),
+            (t("settings.tab_security"),   "security"),
+            (t("settings.tab_system"),     "system"),
         ]):
             btn = QPushButton(label)
             btn.setFixedHeight(46)
@@ -294,7 +297,7 @@ class SettingsPanel(QWidget):
         bot_sep.setStyleSheet(f"background: {sep_clr};")
         root.addWidget(bot_sep)
 
-        close_btn = QPushButton("← Wstecz")
+        close_btn = QPushButton(t("settings.back"))
         close_btn.setFixedHeight(42)
         close_btn.setStyleSheet(f"""
             QPushButton {{
@@ -432,10 +435,37 @@ class SettingsPanel(QWidget):
     # ══════════════════════════════════════════════════════════════════
 
     def _build_appearance(self, vl: QVBoxLayout, dark: bool, accent: str) -> None:
+        # ── Język ─────────────────────────────────────────────────────
+        card_lang = self._card(vl, t("settings.lang_card"), dark)
+        self._row(card_lang, t("settings.lang_row"), t("settings.lang_desc"), dark)
+
+        cur_lang = self._prefs.get("language") or "pl"
+        lang_row = QWidget()
+        lang_row.setStyleSheet("background: transparent; border: none;")
+        lrl = QHBoxLayout(lang_row)
+        lrl.setContentsMargins(16, 0, 16, 14)
+        lrl.setSpacing(8)
+        for lang_code, lang_key in [("pl", "settings.lang_pl"), ("en", "settings.lang_en")]:
+            btn = QPushButton(t(lang_key))
+            btn.setFixedHeight(34)
+            btn.setCheckable(True)
+            btn.setChecked(cur_lang == lang_code)
+            btn.setStyleSheet(self._seg_style(accent, dark, cur_lang == lang_code))
+            def _on_lang(checked, lc=lang_code, b=btn):
+                if not checked:
+                    return
+                self._prefs.set("language", lc)
+                if self.on_language_change:
+                    self.on_language_change(lc)
+            btn.toggled.connect(_on_lang)
+            lrl.addWidget(btn)
+        lrl.addStretch()
+        card_lang.addWidget(lang_row)
+
         # ── Tryb ciemny/jasny ─────────────────────────────────────────
-        card1 = self._card(vl, "Tryb wyświetlania", dark)
-        right1 = self._row(card1, "Tryb",
-                           "Przełącz między jasnym a ciemnym interfejsem.", dark)
+        card1 = self._card(vl, t("settings.display_card"), dark)
+        right1 = self._row(card1, t("settings.display_row"),
+                           t("settings.display_desc"), dark)
 
         # Przełącznik słońce/księżyc
         toggle_frame = QFrame()
@@ -504,7 +534,7 @@ class SettingsPanel(QWidget):
         right1.addWidget(toggle_frame)
 
         # ── Kolor akcentu ─────────────────────────────────────────────
-        card2 = self._card(vl, "Kolor akcentu", dark)
+        card2 = self._card(vl, t("settings.accent_card"), dark)
 
         current = self._prefs.get("color_theme") or "blue"
 
@@ -513,10 +543,10 @@ class SettingsPanel(QWidget):
         preview_row.setStyleSheet("background: transparent; border: none;")
         pr = QHBoxLayout(preview_row)
         pr.setContentsMargins(16, 0, 16, 6)
-        lbl_act = QLabel("Aktywny:")
+        lbl_act = QLabel(t("settings.accent_active"))
         lbl_act.setStyleSheet("color: #888; font-size: 12px; background: transparent; border: none;")
         pr.addWidget(lbl_act)
-        self._theme_name_lbl = QLabel(THEMES.get(current, {}).get("label", ""))
+        self._theme_name_lbl = QLabel(t(f"settings.theme_{current}") if current != "custom" else t("settings.theme_custom"))
         self._theme_name_lbl.setStyleSheet(
             f"color: {accent}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
         )
@@ -557,8 +587,8 @@ class SettingsPanel(QWidget):
             self._swatch_btns[tid] = btn
 
             # Hover: pokaż nazwę i zmień kolor
-            def _enter(event, n=tdata["label"], a=tdata["accent"]):
-                self._theme_name_lbl.setText(n)
+            def _enter(event, _tid=tid, a=tdata["accent"]):
+                self._theme_name_lbl.setText(t(f"settings.theme_{_tid}"))
                 self._theme_name_lbl.setStyleSheet(
                     f"color: {a}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
                 )
@@ -569,7 +599,7 @@ class SettingsPanel(QWidget):
                 cur_t = self._prefs.get("color_theme") or "blue"
                 cur_a = self._prefs.get_accent()
                 self._theme_name_lbl.setText(
-                    THEMES.get(cur_t, {}).get("label", "Własny")
+                    t(f"settings.theme_{cur_t}") if cur_t in THEMES else t("settings.theme_custom")
                 )
                 self._theme_name_lbl.setStyleSheet(
                     f"color: {cur_a}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
@@ -678,7 +708,7 @@ class SettingsPanel(QWidget):
                 # Custom
                 self._prefs.set("accent_custom", color)
                 self._prefs.set("color_theme", "custom")
-                self._theme_name_lbl.setText("Własny")
+                self._theme_name_lbl.setText(t("settings.theme_custom"))
                 self._accent_bar.setStyleSheet(
                     f"background: {color}; border-radius: 3px; margin: 0 16px; border: none;"
                 )
@@ -706,7 +736,7 @@ class SettingsPanel(QWidget):
                 THEMES[tid]["accent"], THEMES[tid]["hover"], sel
             ))
 
-        self._theme_name_lbl.setText(tdata.get("label", ""))
+        self._theme_name_lbl.setText(t(f"settings.theme_{theme_id}") if theme_id in THEMES else t("settings.theme_custom"))
         self._accent_bar.setStyleSheet(
             f"background: {new_accent}; border-radius: 3px; margin: 0 16px; border: none;"
         )
@@ -735,11 +765,10 @@ class SettingsPanel(QWidget):
 
     def _build_security(self, vl: QVBoxLayout, dark: bool, accent: str) -> None:
         # ── Windows Hello ─────────────────────────────────────────────
-        card_wh = self._card(vl, "Windows Hello", dark)
+        card_wh = self._card(vl, t("settings.wh_card"), dark)
 
         right_wh = self._row(
-            card_wh, "Logowanie biometryczne",
-            "Użyj odcisku palca, twarzy lub PIN-u zamiast hasła masterowego.", dark
+            card_wh, t("settings.wh_row"), t("settings.wh_desc"), dark
         )
         self._wh_badge = QLabel("…")
         self._wh_badge.setStyleSheet("color: #888; font-size: 11px; background: transparent; border: none;")
@@ -750,7 +779,7 @@ class SettingsPanel(QWidget):
         wrl = QHBoxLayout(wh_row)
         wrl.setContentsMargins(16, 0, 16, 14)
 
-        self._wh_enable_btn = QPushButton("Włącz Windows Hello")
+        self._wh_enable_btn = QPushButton(t("settings.wh_enable"))
         self._wh_enable_btn.setFixedHeight(38)
         self._wh_enable_btn.setStyleSheet("""
             QPushButton { background: #2d6a4f; color: white; border-radius: 10px;
@@ -761,7 +790,7 @@ class SettingsPanel(QWidget):
         self._wh_enable_btn.clicked.connect(self._wh_enable)
         wrl.addWidget(self._wh_enable_btn)
 
-        self._wh_disable_btn = QPushButton("Wyłącz")
+        self._wh_disable_btn = QPushButton(t("common.disable"))
         self._wh_disable_btn.setFixedHeight(38)
         self._wh_disable_btn.setFixedWidth(90)
         self._wh_disable_btn.setStyleSheet("""
@@ -777,19 +806,18 @@ class SettingsPanel(QWidget):
 
         if not _ON_WINDOWS:
             self._wh_enable_btn.setEnabled(False)
-            self._wh_enable_btn.setText("Niedostępne (tylko Windows)")
+            self._wh_enable_btn.setText(t("settings.wh_unavailable"))
             self._wh_disable_btn.setEnabled(False)
-            self._wh_badge.setText("Niedostępne")
+            self._wh_badge.setText(t("settings.wh_unavailable_badge"))
         else:
             threading.Thread(target=self._wh_check_status_thread, daemon=True).start()
 
         # WH na ekranie blokady
         right_whl = self._row(
-            card_wh, "Odblokuj przez Windows Hello",
-            "Zamiast hasła masterowego — użyj biometrii na ekranie blokady.", dark
+            card_wh, t("settings.wh_lock_row"), t("settings.wh_lock_desc"), dark
         )
         self._wh_lock_btn = QPushButton(
-            "Włączone" if self._prefs.get("wh_lock_unlock") else "Wyłączone"
+            t("common.enabled") if self._prefs.get("wh_lock_unlock") else t("common.disabled")
         )
         self._wh_lock_btn.setCheckable(True)
         self._wh_lock_btn.setChecked(bool(self._prefs.get("wh_lock_unlock")))
@@ -801,13 +829,14 @@ class SettingsPanel(QWidget):
         right_whl.addWidget(self._wh_lock_btn)
 
         # ── Auto-lock ─────────────────────────────────────────────────
-        card_al = self._card(vl, "Automatyczne blokowanie", dark)
-        self._row(
-            card_al, "Zablokuj po bezczynności",
-            "Aplikacja zablokuje się po wybranym czasie bez aktywności.", dark
-        )
+        card_al = self._card(vl, t("settings.autolock_card"), dark)
+        self._row(card_al, t("settings.autolock_row"), t("settings.autolock_desc"), dark)
 
-        _al_labels = ["1 min", "5 min", "15 min", "30 min", "1 godz", "Nigdy"]
+        _al_labels = [
+            t("settings.autolock_1min"), t("settings.autolock_5min"),
+            t("settings.autolock_15min"), t("settings.autolock_30min"),
+            t("settings.autolock_1h"), t("settings.autolock_never"),
+        ]
         _al_values = [60, 300, 900, 1800, 3600, 0]
         self._al_map = dict(zip(_al_labels, _al_values))
         self._al_rev = {v: k for k, v in self._al_map.items()}
@@ -831,14 +860,10 @@ class SettingsPanel(QWidget):
         card_al.addWidget(al_row)
 
         # ── Ochrona ekranu ────────────────────────────────────────────
-        card_sc = self._card(vl, "Ochrona przed zrzutami ekranu", dark)
+        card_sc = self._card(vl, t("settings.screencap_card"), dark)
         sc_enabled = bool(self._prefs.get("screen_capture_protection"))
-        right_sc = self._row(card_sc,
-                             "Chroń okno przed zrzutami i nagraniami",
-                             "Okno będzie czarne na screenshotach i w OBS/nagrywaniu.\n"
-                             "Działa tylko na Windows 10 2004+ (WDA_EXCLUDEFROMCAPTURE).",
-                             dark)
-        sc_btn = QPushButton("Włączone" if sc_enabled else "Wyłączone")
+        right_sc = self._row(card_sc, t("settings.screencap_row"), t("settings.screencap_desc"), dark)
+        sc_btn = QPushButton(t("common.enabled") if sc_enabled else t("common.disabled"))
         sc_btn.setFixedSize(110, 32)
         sc_btn.setCheckable(True)
         sc_btn.setChecked(sc_enabled)
@@ -847,57 +872,91 @@ class SettingsPanel(QWidget):
         right_sc.addWidget(sc_btn)
 
         # ── Schowek ───────────────────────────────────────────────────
-        card_cb = self._card(vl, "Schowek", dark)
+        card_cb = self._card(vl, t("settings.clipboard_card"), dark)
         clr_hist = bool(self._prefs.get("clear_clipboard_history"))
-        right_cb = self._row(card_cb,
-                             "Wyczyść historię schowka po kopiowaniu",
-                             "Windows 11 Win+V przechowuje skopiowane hasła na stałe.\n"
-                             "Włącz, aby czyścić całą historię przy kopiowaniu hasła lub kodu OTP.",
+        right_cb = self._row(card_cb, t("settings.clipboard_row"), t("settings.clipboard_desc"),
                              dark)
-        clr_btn = QPushButton("Włączone" if clr_hist else "Wyłączone")
+        clr_btn = QPushButton(t("common.enabled") if clr_hist else t("common.disabled"))
         clr_btn.setFixedSize(110, 32)
         clr_btn.setCheckable(True)
         clr_btn.setChecked(clr_hist)
         clr_btn.setStyleSheet(self._toggle_style(accent, clr_hist, dark))
         clr_btn.toggled.connect(lambda checked: (
             self._prefs.set("clear_clipboard_history", checked),
-            clr_btn.setText("Włączone" if checked else "Wyłączone"),
+            clr_btn.setText(t("common.enabled") if checked else t("common.disabled")),
             clr_btn.setStyleSheet(self._toggle_style(accent, checked, dark)),
         ))
         right_cb.addWidget(clr_btn)
 
+        # ── PIN (quick unlock) ────────────────────────────────────────
+        card_pin = self._card(vl, t("settings.pin_card"), dark)
+        has_pin  = self.db.has_pin(self.user)
+        self._row(card_pin, t("settings.pin_row"), t("settings.pin_desc"), dark)
+        pin_row = QWidget()
+        pin_row.setStyleSheet("background: transparent; border: none;")
+        pin_rl = QHBoxLayout(pin_row)
+        pin_rl.setContentsMargins(16, 0, 16, 12)
+        pin_rl.setSpacing(8)
+        self._pin_set_btn = QPushButton(
+            t("settings.pin_change") if has_pin else t("settings.pin_set")
+        )
+        self._pin_set_btn.setFixedHeight(34)
+        self._pin_set_btn.setStyleSheet(
+            f"background: {accent}; color: white; border: none;"
+            "border-radius: 6px; font-size: 12px; font-weight: 600; padding: 0 16px;"
+        )
+        self._pin_set_btn.clicked.connect(lambda: self._show_set_pin(accent, dark))
+        pin_rl.addWidget(self._pin_set_btn)
+        if has_pin:
+            pin_del_btn = QPushButton(t("settings.pin_remove"))
+            pin_del_btn.setFixedHeight(34)
+            pin_del_btn.setStyleSheet(
+                "background: #3a1a1a; color: #e05252; border: 1px solid #5a2a2a;"
+                "border-radius: 6px; font-size: 12px; padding: 0 16px;"
+            )
+            pin_del_btn.clicked.connect(lambda: self._remove_pin(pin_del_btn, accent, dark))
+            pin_rl.addWidget(pin_del_btn)
+        pin_rl.addStretch()
+        card_pin.addWidget(pin_row)
+
+        # ── Zaufane urządzenia ────────────────────────────────────────
+        card_td = self._card(vl, t("settings.td_card"), dark)
+        self._row(card_td, t("settings.td_row"), t("settings.td_desc"), dark)
+        self._td_list_widget = QWidget()
+        self._td_list_widget.setStyleSheet("background: transparent; border: none;")
+        self._td_list_vl = QVBoxLayout(self._td_list_widget)
+        self._td_list_vl.setContentsMargins(16, 0, 16, 4)
+        self._td_list_vl.setSpacing(4)
+        card_td.addWidget(self._td_list_widget)
+        self._refresh_trusted_devices(card_td, accent, dark)
+
         # ── Zmiana hasła ──────────────────────────────────────────────
-        card_pwd = self._card(vl, "Hasło masterowe", dark)
-        self._row(card_pwd, "Zmiana hasła masterowego",
-                  "Wymaga podania aktualnego hasła oraz kodu 2FA.", dark)
-        self._action_btn(card_pwd, "Zmień hasło masterowe",
+        card_pwd = self._card(vl, t("settings.pwd_card"), dark)
+        self._row(card_pwd, t("settings.pwd_row"), t("settings.pwd_desc"), dark)
+        self._action_btn(card_pwd, t("settings.pwd_change_btn"),
                          self._show_reset_password, "#1f6aa5", "#1a5a94")
 
         # ── Klucz recovery ────────────────────────────────────────────
-        card_rec = self._card(vl, "Klucz recovery", dark)
+        card_rec = self._card(vl, t("settings.rec_card"), dark)
         has_rec = self.db.has_recovery_key(self.user)
-        rec_status = "✅ Skonfigurowany" if has_rec else "⚠️ Nie skonfigurowany"
-        rec_desc   = ("Klucz recovery umożliwia reset hasła masterowego bez dostępu do\n"
-                      "telefonu z 2FA — jedyna metoda pozwalająca zachować wszystkie hasła.")
-        self._row(card_rec, rec_status, rec_desc, dark)
+        rec_status = t("settings.rec_configured") if has_rec else t("settings.rec_not_configured")
+        self._row(card_rec, rec_status, t("settings.rec_desc"), dark)
         self._rec_setup_btn = self._action_btn(
             card_rec,
-            "Regeneruj klucz recovery" if has_rec else "Skonfiguruj klucz recovery",
+            t("settings.rec_regen") if has_rec else t("settings.rec_setup"),
             self._show_setup_recovery,
             "#2d6a4f", "#40916c",
         )
 
         # ── Reset 2FA ─────────────────────────────────────────────────
-        card_2fa = self._card(vl, "Uwierzytelnianie dwuetapowe", dark)
-        self._row(card_2fa, "Wygeneruj nowy kod QR",
-                  "Przydatne przy zmianie telefonu lub aplikacji 2FA.", dark)
-        self._action_btn(card_2fa, "Wygeneruj nowy QR",
+        card_2fa = self._card(vl, t("settings.totp_card"), dark)
+        self._row(card_2fa, t("settings.totp_row"), t("settings.totp_desc"), dark)
+        self._action_btn(card_2fa, t("settings.totp_new_qr"),
                          self._show_reset_2fa, "#2d6a4f", "#40916c")
 
         # ── Auto-type ─────────────────────────────────────────────────
-        card_at = self._card(vl, "Auto-Type", dark)
-        self._row(card_at, "Opóźnienie przed wpisaniem",
-                  "Czas na przełączenie się na okno logowania po kliknięciu Auto-type.", dark)
+        card_at = self._card(vl, t("settings.autotype_card"), dark)
+        self._row(card_at, t("settings.autotype_row"), t("settings.autotype_desc"), dark)
 
         _at_labels = ["1s", "2s", "3s", "5s"]
         _at_values = [1, 2, 3, 5]
@@ -921,8 +980,8 @@ class SettingsPanel(QWidget):
         atrl.addStretch()
         card_at.addWidget(at_row)
 
-        self._row(card_at, "Sekwencja wpisywania",
-                  "Tokeny: {USERNAME} {TAB} {PASSWORD} {ENTER} {DELAY=ms}", dark)
+        self._row(card_at, t("settings.autotype_seq_row"),
+                  t("settings.autotype_seq_desc"), dark)
         seq_w = QWidget()
         seq_w.setStyleSheet("background: transparent; border: none;")
         seql = QHBoxLayout(seq_w)
@@ -940,7 +999,7 @@ class SettingsPanel(QWidget):
             }}
         """)
         seql.addWidget(self._at_seq_entry)
-        save_seq_btn = QPushButton("Zapisz")
+        save_seq_btn = QPushButton(t("settings.autotype_save"))
         save_seq_btn.setFixedSize(80, 36)
         save_seq_btn.setStyleSheet(f"""
             QPushButton {{ background: {accent}; color: white;
@@ -953,10 +1012,9 @@ class SettingsPanel(QWidget):
         card_at.addWidget(seq_w)
 
         # ── Dziennik aktywności ───────────────────────────────────────
-        card_audit = self._card(vl, "Dziennik aktywności", dark)
-        self._row(card_audit, "Historia zdarzeń",
-                  "Logowania, kopiowanie haseł, eksport — ostatnie 100 zdarzeń (90 dni).", dark)
-        self._action_btn(card_audit, "Pokaż dziennik", self._show_audit_log,
+        card_audit = self._card(vl, t("settings.audit_card"), dark)
+        self._row(card_audit, t("settings.audit_row"), t("settings.audit_desc"), dark)
+        self._action_btn(card_audit, t("settings.audit_show"), self._show_audit_log,
                          "#2a2a4a" if dark else "#e8e8ff", "#3a3a6a" if dark else "#d0d0ff",
                          text_color="#a0a8ff" if dark else "#4040aa")
 
@@ -982,11 +1040,10 @@ class SettingsPanel(QWidget):
 
     def _build_system(self, vl: QVBoxLayout, dark: bool, accent: str) -> None:
         # ── Ctrl+W ───────────────────────────────────────────────────
-        card_w = self._card(vl, "Skrót Ctrl+W", dark)
-        right_w = self._row(card_w, "Akcja Ctrl+W",
-                            "Co ma robić Ctrl+W w głównym oknie aplikacji.", dark)
+        card_w = self._card(vl, t("settings.ctrlw_card"), dark)
+        right_w = self._row(card_w, t("settings.ctrlw_row"), t("settings.ctrlw_desc"), dark)
         cur_cw = self._prefs.get("ctrl_w_action") or "minimize"
-        for lbl, val in [("Minimalizuj", "minimize"), ("Zamknij", "close")]:
+        for lbl, val in [(t("settings.ctrlw_minimize"), "minimize"), (t("settings.ctrlw_close"), "close")]:
             b = QPushButton(lbl)
             b.setFixedHeight(30)
             b.setCheckable(True)
@@ -998,13 +1055,12 @@ class SettingsPanel(QWidget):
             right_w.addWidget(b)
 
         # ── Autostart ─────────────────────────────────────────────────
-        card_as = self._card(vl, "Autostart", dark)
+        card_as = self._card(vl, t("settings.autostart_card"), dark)
         right_as = self._row(
-            card_as, "Uruchamiaj przy starcie systemu",
-            "AegisVault uruchomi się automatycznie po zalogowaniu do systemu.", dark
+            card_as, t("settings.autostart_row"), t("settings.autostart_desc"), dark
         )
         as_enabled = autostart.is_enabled()
-        as_btn = QPushButton("Włączone" if as_enabled else "Wyłączone")
+        as_btn = QPushButton(t("common.enabled") if as_enabled else t("common.disabled"))
         as_btn.setCheckable(True)
         as_btn.setChecked(as_enabled)
         as_btn.setFixedSize(110, 32)
@@ -1013,11 +1069,14 @@ class SettingsPanel(QWidget):
         right_as.addWidget(as_btn)
 
         # ── Automatyczny backup ───────────────────────────────────────
-        card_backup = self._card(vl, "Automatyczny backup", dark)
-        self._row(card_backup, "Częstotliwość",
-                  "Backup zaszyfrowany zapisywany w folderze danych aplikacji.", dark)
+        card_backup = self._card(vl, t("settings.backup_card"), dark)
+        self._row(card_backup, t("settings.backup_row"), t("settings.backup_desc"), dark)
 
-        _backup_labels = ["Wyłączony", "Codziennie", "Co 3 dni", "Tygodniowo", "Miesięcznie"]
+        _backup_labels = [
+            t("settings.backup_disabled"), t("settings.backup_daily"),
+            t("settings.backup_3days"),    t("settings.backup_weekly"),
+            t("settings.backup_monthly"),
+        ]
         _backup_values = ["wyłączony", "codziennie", "co 3 dni", "tygodniowo", "miesięcznie"]
         _l2v = dict(zip(_backup_labels, _backup_values))
         _v2l = dict(zip(_backup_values, _backup_labels))
@@ -1025,7 +1084,7 @@ class SettingsPanel(QWidget):
 
         backup_combo = QComboBox()
         backup_combo.addItems(_backup_labels)
-        backup_combo.setCurrentText(_v2l.get(cur_int, "Wyłączony"))
+        backup_combo.setCurrentText(_v2l.get(cur_int, t("settings.backup_disabled")))
         backup_combo.setStyleSheet(f"""
             QComboBox {{
                 background: {'#2a2a2a' if dark else '#f0f0f0'};
@@ -1054,19 +1113,18 @@ class SettingsPanel(QWidget):
         bwl.addStretch()
         card_backup.addWidget(bw)
 
-        self._action_btn(card_backup, "Wykonaj backup teraz", self._do_backup_now)
+        self._action_btn(card_backup, t("settings.backup_now"), self._do_backup_now)
 
         # ── Strefa niebezpieczna ──────────────────────────────────────
-        card_del = self._card(vl, "Strefa niebezpieczna", dark)
-        self._row(card_del, "Usuń konto",
-                  "Trwale usuwa konto i wszystkie zapisane hasła.\nOperacji nie można cofnąć!", dark)
-        self._action_btn(card_del, "Usuń konto", self._show_delete_account,
+        card_del = self._card(vl, t("settings.danger_card"), dark)
+        self._row(card_del, t("settings.danger_row"), t("settings.danger_desc"), dark)
+        self._action_btn(card_del, t("settings.danger_btn"), self._show_delete_account,
                          color="#4a1a1a", hover="#5a2020", text_color="#ff8080")
 
         # ── Logi ──────────────────────────────────────────────────────
-        card_logs = self._card(vl, "Logi aplikacji", dark)
+        card_logs = self._card(vl, t("settings.logs_card"), dark)
 
-        logs_info = QLabel("Pliki logów przechowywane w AppData/AegisVault/logs/")
+        logs_info = QLabel(t("settings.logs_info"))
         logs_info.setStyleSheet("color: #888; font-size: 12px; padding: 0 16px; background: transparent; border: none;")
         card_logs.addWidget(logs_info)
 
@@ -1074,9 +1132,9 @@ class SettingsPanel(QWidget):
         logs_row.setStyleSheet("background: transparent; border: none;")
         lrl = QHBoxLayout(logs_row)
         lrl.setContentsMargins(16, 4, 16, 4)
-        lrl.addWidget(QLabel("Przechowuj logi przez:"))
+        lrl.addWidget(QLabel(t("settings.logs_keep")))
 
-        self._log_days_lbl = QLabel(f"{self._prefs.get('log_retention_days')} dni")
+        self._log_days_lbl = QLabel(t("settings.logs_days", n=self._prefs.get("log_retention_days") or 7))
         self._log_days_lbl.setStyleSheet(
             f"color: {accent}; font-size: 13px; font-weight: bold; background: transparent; border: none;"
         )
@@ -1192,7 +1250,7 @@ class SettingsPanel(QWidget):
     def _on_screen_capture_toggle(self, checked: bool, btn: QPushButton,
                                    accent: str, dark: bool) -> None:
         self._prefs.set("screen_capture_protection", checked)
-        btn.setText("Włączone" if checked else "Wyłączone")
+        btn.setText(t("common.enabled") if checked else t("common.disabled"))
         btn.setStyleSheet(self._toggle_style(accent, checked, dark))
         # Zastosuj natychmiast na okno główne
         win = self.window()
@@ -1201,12 +1259,12 @@ class SettingsPanel(QWidget):
 
     def _on_autostart_toggle(self, checked: bool, btn: QPushButton, accent: str) -> None:
         dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"
-        btn.setText("Włączone" if checked else "Wyłączone")
+        btn.setText(t("common.enabled") if checked else t("common.disabled"))
         btn.setStyleSheet(self._toggle_style(accent, checked, dark))
         if checked:
             if not autostart.enable():
                 btn.setChecked(False)
-                btn.setText("Wyłączone")
+                btn.setText(t("common.disabled"))
                 btn.setStyleSheet(self._toggle_style(accent, False, dark))
                 show_error("Błąd", "Nie udało się dodać wpisu autostartu.", parent=self)
         else:
@@ -1244,14 +1302,14 @@ class SettingsPanel(QWidget):
         self._prefs.set("autotype_sequence", seq)
 
     def _on_log_slider(self, val: int) -> None:
-        self._log_days_lbl.setText(f"{val} dni")
+        self._log_days_lbl.setText(t("settings.logs_days", n=val))
         self._prefs.set("log_retention_days", val)
         cleanup_old_logs(val)
 
     def _on_wh_lock_toggle(self, checked: bool) -> None:
         accent = self._prefs.get_accent()
         dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"
-        self._wh_lock_btn.setText("Włączone" if checked else "Wyłączone")
+        self._wh_lock_btn.setText(t("common.enabled") if checked else t("common.disabled"))
         self._wh_lock_btn.setStyleSheet(self._toggle_style(accent, checked, dark))
         self._prefs.set("wh_lock_unlock", checked)
 
@@ -1267,19 +1325,19 @@ class SettingsPanel(QWidget):
     def _wh_update_ui(self, status: str, enabled: bool) -> None:
         available = (status == "Available")
         if not available:
-            msg = wh.STATUS_MESSAGES.get(status, "Niedostępne")
-            self._wh_badge.setText("Niedostępne")
+            msg = wh.STATUS_MESSAGES.get(status, t("settings.wh_unavailable_badge"))
+            self._wh_badge.setText(t("settings.wh_unavailable_badge"))
             self._wh_badge.setStyleSheet("color: #e05252; font-size: 11px; background: transparent; border: none;")
             self._wh_enable_btn.setEnabled(False)
             self._wh_enable_btn.setText(msg)
             self._wh_disable_btn.setEnabled(False)
         elif enabled:
-            self._wh_badge.setText("Włączone")
+            self._wh_badge.setText(t("common.enabled"))
             self._wh_badge.setStyleSheet("color: #4caf50; font-size: 11px; background: transparent; border: none;")
             self._wh_enable_btn.setEnabled(False)
             self._wh_disable_btn.setEnabled(True)
         else:
-            self._wh_badge.setText("Wyłączone")
+            self._wh_badge.setText(t("common.disabled"))
             self._wh_badge.setStyleSheet("color: #888; font-size: 11px; background: transparent; border: none;")
             self._wh_enable_btn.setEnabled(True)
             self._wh_disable_btn.setEnabled(False)
@@ -1394,7 +1452,7 @@ class SettingsPanel(QWidget):
             if not verified:
                 QTimer.singleShot(0, lambda: (
                     self._wh_disable_btn.setEnabled(True),
-                    self._wh_disable_btn.setText("Wyłącz"),
+                    self._wh_disable_btn.setText(t("common.disable")),
                     show_error("Windows Hello", "Weryfikacja nieudana lub anulowana.", parent=self),
                 ))
                 return
@@ -1410,6 +1468,157 @@ class SettingsPanel(QWidget):
     # ══════════════════════════════════════════════════════════════════
     # LOGIKA — ZMIANA HASŁA
     # ══════════════════════════════════════════════════════════════════
+
+    # ── PIN ───────────────────────────────────────────────────────────
+
+    def _show_set_pin(self, accent: str, dark: bool) -> None:
+        from gui_qt.dialogs import show_error, show_success
+        dialog = self._make_dialog("Ustaw PIN", 360, 300)
+        vl = QVBoxLayout(dialog)
+        vl.setSpacing(10)
+        vl.setContentsMargins(24, 20, 24, 20)
+
+        field_style = (
+            "background:#2a2a2a; border:1px solid #444; border-radius:8px;"
+            "padding:0 12px; font-size:16px; color:#e0e0e0; letter-spacing:6px;"
+        )
+
+        def _field(label_text):
+            lbl = QLabel(label_text)
+            lbl.setStyleSheet("font-size:12px; color:#aaa; margin-top:4px;")
+            vl.addWidget(lbl)
+            e = QLineEdit()
+            e.setEchoMode(QLineEdit.EchoMode.Password)
+            e.setMaxLength(6)
+            e.setFixedHeight(44)
+            e.setPlaceholderText("••••••")
+            e.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            e.setStyleSheet(field_style)
+            vl.addWidget(e)
+            return e
+
+        pin1 = _field("Nowy PIN (6 cyfr):")
+        pin2 = _field("Powtórz PIN:")
+
+        btn_row = QHBoxLayout()
+        cancel = QPushButton("Anuluj")
+        cancel.setFixedHeight(36)
+        cancel.setStyleSheet("background:#333; border:1px solid #555; border-radius:6px; color:#ccc; font-size:12px;")
+        save = QPushButton("Zapisz PIN")
+        save.setFixedHeight(36)
+        save.setDefault(True)
+        save.setStyleSheet(f"background:{accent}; border:none; border-radius:6px; color:white; font-size:12px; font-weight:600;")
+        btn_row.addWidget(cancel)
+        btn_row.addWidget(save)
+        vl.addLayout(btn_row)
+
+        cancel.clicked.connect(dialog.reject)
+
+        def _save():
+            p1, p2 = pin1.text().strip(), pin2.text().strip()
+            if len(p1) != 6 or not p1.isdigit():
+                show_error("Błąd", "PIN musi mieć dokładnie 6 cyfr.", parent=dialog)
+                return
+            if p1 != p2:
+                show_error("Błąd", "Piny nie są identyczne.", parent=dialog)
+                return
+            self.db.set_pin(self.user, p1)
+            show_success("PIN", "PIN został ustawiony.", parent=dialog)
+            dialog.accept()
+            if hasattr(self, "_pin_set_btn"):
+                self._pin_set_btn.setText("Zmień PIN")
+
+        save.clicked.connect(_save)
+        pin2.returnPressed.connect(_save)
+        dialog.exec()
+
+    def _remove_pin(self, btn: QPushButton, accent: str, dark: bool) -> None:
+        from gui_qt.dialogs import ask_yes_no, show_success
+        if ask_yes_no("Usuń PIN", "Na pewno chcesz usunąć PIN?\n"
+                      "Przy następnej blokadzie będzie wymagane hasło masterowe.",
+                      parent=self):
+            self.db.clear_pin(self.user)
+            show_success("PIN", "PIN został usunięty.", parent=self)
+            btn.setParent(None)
+            if hasattr(self, "_pin_set_btn"):
+                self._pin_set_btn.setText("Ustaw PIN")
+
+    # ── Zaufane urządzenia ────────────────────────────────────────────
+
+    def _refresh_trusted_devices(self, card_widget, accent: str, dark: bool) -> None:
+        while self._td_list_vl.count():
+            item = self._td_list_vl.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        devices = self.db.get_trusted_devices(self.user)
+        if not devices:
+            no_lbl = QLabel(t("settings.td_none"))
+            no_lbl.setStyleSheet("font-size:11px; color:#666; padding-bottom:8px;")
+            self._td_list_vl.addWidget(no_lbl)
+        else:
+            for dev in devices:
+                row = QWidget()
+                row.setStyleSheet("background:transparent; border:none;")
+                rl = QHBoxLayout(row)
+                rl.setContentsMargins(0, 0, 0, 0)
+                rl.setSpacing(8)
+                from datetime import timezone as _tz
+                exp = dev.expires_at
+                if hasattr(exp, "tzinfo") and exp.tzinfo is None:
+                    from datetime import timezone
+                    exp = exp.replace(tzinfo=timezone.utc)
+                days_left = (exp - __import__("datetime").datetime.now(__import__("datetime").timezone.utc)).days
+                name_lbl = QLabel(f"💻 {dev.device_name or 'Unknown device'}  "
+                                  f"<span style='color:#666; font-size:10px;'>{t('settings.td_expires', n=days_left)}</span>")
+                name_lbl.setStyleSheet("font-size:12px; color:#ccc;")
+                name_lbl.setTextFormat(Qt.TextFormat.RichText)
+                rl.addWidget(name_lbl, stretch=1)
+                del_btn = QPushButton("Usuń")
+                del_btn.setFixedSize(56, 26)
+                del_btn.setStyleSheet(
+                    "background:#3a1a1a; color:#e05252; border:1px solid #5a2a2a;"
+                    "border-radius:5px; font-size:11px;"
+                )
+                dev_id = dev.id
+                del_btn.clicked.connect(
+                    lambda _, did=dev_id: self._revoke_device(did, card_widget, accent, dark)
+                )
+                rl.addWidget(del_btn)
+                self._td_list_vl.addWidget(row)
+
+        # Przycisk "Usuń wszystkie"
+        if devices:
+            btn_row = QWidget()
+            btn_row.setStyleSheet("background:transparent; border:none;")
+            brl = QHBoxLayout(btn_row)
+            brl.setContentsMargins(0, 4, 0, 8)
+            revoke_all = QPushButton(t("settings.td_remove_all"))
+            revoke_all.setFixedHeight(30)
+            revoke_all.setStyleSheet(
+                "background:#3a1a1a; color:#e05252; border:1px solid #5a2a2a;"
+                "border-radius:6px; font-size:11px; padding: 0 12px;"
+            )
+            revoke_all.clicked.connect(
+                lambda: self._revoke_all_devices(card_widget, accent, dark)
+            )
+            brl.addWidget(revoke_all)
+            brl.addStretch()
+            self._td_list_vl.addWidget(btn_row)
+
+    def _revoke_device(self, device_id: int, card_widget, accent: str, dark: bool) -> None:
+        from gui_qt.dialogs import ask_yes_no
+        if ask_yes_no("Usuń urządzenie", "Usunąć to zaufane urządzenie?\n"
+                      "Przy następnym logowaniu będzie wymagany kod TOTP.", parent=self):
+            self.db.remove_trusted_device(device_id)
+            self._refresh_trusted_devices(card_widget, accent, dark)
+
+    def _revoke_all_devices(self, card_widget, accent: str, dark: bool) -> None:
+        from gui_qt.dialogs import ask_yes_no
+        if ask_yes_no("Usuń wszystkie", "Usunąć wszystkie zaufane urządzenia?\n"
+                      "Wszystkie urządzenia będą wymagać kodu TOTP przy logowaniu.", parent=self):
+            self.db.remove_all_trusted_devices(self.user)
+            self._refresh_trusted_devices(card_widget, accent, dark)
 
     def _show_reset_password(self) -> None:
         dialog = self._make_dialog("Zmiana hasła masterowego", 420, 420)
@@ -1429,7 +1638,7 @@ class SettingsPanel(QWidget):
         sep.start_animation()
         vl.addWidget(sep)
 
-        has_totp = bool(self.user.totp_secret)
+        has_totp = self.db.has_totp(self.user)
         fields = {}
         field_defs = [
             ("old",  "Aktualne hasło masterowe", "Wpisz aktualne hasło...", True),
@@ -1487,8 +1696,8 @@ class SettingsPanel(QWidget):
         if not verify_master_password(old_pwd, self.user.master_password_hash):
             show_error("Błąd", "Aktualne hasło jest nieprawidłowe!", parent=dialog)
             return
-        if self.user.totp_secret:
-            if not totp_code or not TOTPManager(secret=self.user.totp_secret).verify(totp_code):
+        if self.db.has_totp(self.user):
+            if not totp_code or not TOTPManager(secret=self.db.get_totp_secret(self.user)).verify(totp_code):
                 show_error("Błąd 2FA", "Nieprawidłowy kod 2FA!", parent=dialog)
                 return
         try:
@@ -1641,8 +1850,7 @@ class SettingsPanel(QWidget):
                 err2.setText("Nieprawidłowy kod!")
                 entry_code.clear()
                 return
-            self.user.totp_secret = new_totp.secret
-            self.db.session.commit()
+            self.db.set_totp_secret(self.user, new_totp.secret)
             show_success("2FA zaktualizowane",
                          "Nowy kod QR zapisany.\nOd teraz używaj nowego kodu.", parent=dialog)
             dialog.accept()
@@ -1838,7 +2046,7 @@ class SettingsPanel(QWidget):
         if not verify_master_password(pwd, self.user.master_password_hash):
             show_error("Błąd", "Nieprawidłowe hasło masterowe!", parent=dialog)
             return
-        if not TOTPManager(secret=self.user.totp_secret).verify(totp):
+        if not TOTPManager(secret=self.db.get_totp_secret(self.user)).verify(totp):
             show_error("Błąd 2FA", "Nieprawidłowy kod 2FA!", parent=dialog)
             return
         try:

@@ -32,11 +32,13 @@ class User(Base):
     kdf_version                = Column(Integer, default=0, nullable=False, server_default="0")
     recovery_salt              = Column(LargeBinary, nullable=True)   # sól do Argon2id recovery
     recovery_encrypted_master  = Column(LargeBinary, nullable=True)   # masterhasło zaszyfrowane kluczem recovery
+    pin_hash                   = Column(LargeBinary, nullable=True)   # Argon2id hash PIN-u (quick unlock)
     created_at                 = Column(DateTime, default=datetime.utcnow)
 
     passwords         = relationship("Password", back_populates="user", cascade="all, delete-orphan")
     custom_categories = relationship("CustomCategory", back_populates="user", cascade="all, delete-orphan")
     audit_logs        = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
+    trusted_devices   = relationship("TrustedDevice", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User id={self.id} username={self.username}>"
@@ -134,6 +136,25 @@ class AuditLog(Base):
     )
 
 
+class TrustedDevice(Base):
+    """Zaufane urządzenia — pomijają TOTP przez 30 dni."""
+    __tablename__ = "trusted_devices"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    user_id      = Column(Integer, ForeignKey("users.id"), nullable=False)
+    device_token = Column(String(64), nullable=False, unique=True)
+    device_name  = Column(String(128), nullable=True)
+    expires_at   = Column(DateTime(timezone=True), nullable=False)
+    created_at   = Column(DateTime(timezone=True),
+                          default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = relationship("User", back_populates="trusted_devices")
+
+    __table_args__ = (
+        Index("ix_trusted_user", "user_id"),
+    )
+
+
 class CustomCategory(Base):
     """Własne kategorie tworzone przez użytkownika."""
     __tablename__ = "custom_categories"
@@ -206,6 +227,26 @@ def init_db(db_path: str = "password_manager.db") -> object:
             conn.execute(text("ALTER TABLE users ADD COLUMN recovery_salt BLOB"))
         if "recovery_encrypted_master" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN recovery_encrypted_master BLOB"))
+
+        # Migracja users.pin_hash (quick unlock)
+        if "pin_hash" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN pin_hash BLOB"))
+
+        # Migracja trusted_devices (TOTP remember 30 dni)
+        if not inspector.has_table("trusted_devices"):
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS trusted_devices (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id      INTEGER NOT NULL REFERENCES users(id),
+                    device_token VARCHAR(64) NOT NULL UNIQUE,
+                    device_name  VARCHAR(128),
+                    expires_at   DATETIME NOT NULL,
+                    created_at   DATETIME NOT NULL
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_trusted_user ON trusted_devices (user_id)"
+            ))
 
         # Migracja custom_categories.icon
         cc_cols = [c["name"] for c in inspector.get_columns("custom_categories")]

@@ -86,6 +86,62 @@ Tabela `audit_log`, widok w settings, auto-purge po 90 dniach.
 
 ## 🖥️ UX / Funkcje desktopowe
 
+### ✅ Ekran startowy (splash screen)
+
+Zaimplementowane — `gui_qt/splash_screen.py`.
+Bezramkowe okno 600×340, tło HexBackground z animacją "breath", logo + "AegisVault" + wersja.
+Pasek postępu 3px z 5 etapami (prawdziwe ładowanie bazy przy kroku 40%).
+Fade-out 350ms przed otwarciem LoginWindow.
+Flaga `--no-splash` do pominięcia. Integracja w `main.py`.
+
+---
+
+### ✅ Logowanie zintegrowane z głównym oknem (single-window flow)
+
+Zaimplementowane — `gui_qt/app_window.py`.
+Jedno okno `AppWindow(QMainWindow)` przez cały cykl życia aplikacji.
+`LoginWindow` i `MainWindow` w trybie `embedded=True` — sygnały zamiast `close()`.
+Cross-fade 220ms + animacja rozmiaru okna przy przejściu login↔vault.
+`main.py` uproszczony — tylko `AppWindow(db_path).show()`.
+
+### 🟡 Logowanie zintegrowane z głównym oknem — do dopracowania
+
+Aktualnie: `LoginWindow` i `MainWindow` to osobne okna — przy przejściu migotanie i zmiana rozmiaru.
+Cel: jedno okno aplikacji przez cały cykl życia — przejście login → vault przez animację.
+
+**Implementacja:**
+- [ ] Główne okno `AppWindow(QMainWindow)` — nadrzędny kontener przez cały czas
+- [ ] `QStackedWidget` jako centralny widget: strona 0 = login, strona 1 = vault
+- [ ] Login (`LoginPanel`) i vault (`MainPanel`) jako `QWidget`, nie osobne `QMainWindow`
+- [ ] Przejście: `QPropertyAnimation` na `opacity` lub `geometry` — fade / slide między stronami
+- [ ] Rozmiar okna dostosowuje się animowanie (login ~480×640, vault ~1200×720)
+- [ ] `_complete_login()` → `AppWindow.show_vault(user, crypto)`
+- [ ] Wylogowanie → `AppWindow.show_login()` z fade-out vaultu
+- [ ] Tytuł paska: "AegisVault — Logowanie" ↔ "AegisVault — {username}"
+- [ ] Duże zadanie — wymaga refaktoru `LoginWindow` i `MainWindow` na panele
+
+---
+
+### 🟡 Windows Hello / biometria do odblokowywania (auto-lock)
+
+Aktualnie: Windows Hello działa przy logowaniu (pierwsze uruchomienie).
+Brakuje: odblokowanie po auto-lock przez WH / odpowiednik na macOS / Linux.
+
+**Implementacja:**
+- [ ] `utils/biometrics.py` — abstrakycja `BiometricUnlock.authenticate(reason) -> bool`:
+  - Windows: `WinRT` `UserConsentVerifier` (już używane w `utils/windows_hello.py`) — reuse
+  - macOS: `LocalAuthentication` framework przez `pyobjc-framework-LocalAuthentication`
+  - Linux: `fprintd` przez D-Bus (`pydbus` / `dbus-python`)
+- [ ] `main_window._lock_master_dialog()` i `_lock_pin_dialog()` — przycisk "Odblokuj przez Windows Hello" (tylko gdy WH dostępne)
+- [ ] Po kliknięciu: wywołaj `BiometricUnlock.authenticate("Odblokuj AegisVault")` → jeśli OK → odblokuj
+- [ ] Toggle w settings (zakładka Bezpieczeństwo): "Zezwól na odblokowanie biometryczne"
+  - Domyślnie wyłączone — użytkownik musi świadomie włączyć
+  - Osobny toggle per metoda: Windows Hello / Touch ID / Linia papilarnych
+- [ ] Fallback: jeśli biometria niedostępna / anulowana → normalny PIN lub masterhasło
+- [ ] `utils/windows_hello.py` już ma `is_available()` — rozszerzyć o `unlock()` dla auto-lock
+
+---
+
 ### ✅ Pole URL per wpis + matching
 
 Zaimplementowane — commit `22dd746`.
@@ -128,12 +184,11 @@ Checkbox, toolbar, Ctrl+A, przenoszenie kategorii, kosz zbiorowy.
 
 ---
 
-### 🟠 PIN / quick unlock
+### ✅ PIN / quick unlock
 
-- [ ] Opcjonalny 6-cyfrowy PIN jako szybki unlock po auto-lock (nie zastępuje masterhasła przy starcie)
-- [ ] PIN → Argon2id → małokosztowy derive → odblokuj zapisany w RAM zaszyfrowany klucz sesji
-- [ ] Próg: po 3 błędnych PIN → wymagane pełne masterhasło
-- [ ] Toggle w settings: "Włącz PIN do odblokowywania"
+Zaimplementowane — `db_manager.set_pin/verify_pin/clear_pin/has_pin()`, kolumna `users.pin_hash` (Argon2id, niski koszt).
+`main_window._lock_pin_dialog()` — 6-cyfrowy PIN, po 3 błędach fallback na masterhasło.
+Sekcja "PIN do odblokowywania" w settings — ustaw/zmień/usuń.
 
 ---
 
@@ -261,13 +316,12 @@ xattr -dr com.apple.quarantine AegisVault.app
 
 ---
 
-### 🟠 Import Bitwarden: typy non-login po cichu pomijane
+### ✅ Import Bitwarden: typy non-login
 
-`import_manager.py:59` — `if item.get("type") != 1: continue`
-Bitwarden eksportuje też: type 2 = Secure Note, type 3 = Card, type 4 = Identity.
-
-- [ ] Policzyć pominięte wpisy i pokazać po imporcie: "Zaimportowano 42, pominięto 8 (notatki/karty — nieobsługiwany typ)"
-- [ ] Docelowo: importować Secure Notes jako typ "note"
+Naprawione — `_from_bitwarden()` obsługuje:
+- type 1 (Login) → wpis hasła + OTP z pola `login.totp`
+- type 2 (Secure Note) → wpis notatki (`entry_type="note"`, kategoria "Notatki")
+- type 3 (Card) / 4 (Identity) → po cichu pomijane (nieobsługiwany typ)
 
 ---
 
@@ -323,6 +377,15 @@ Tabela `password_fields`, sekcja w formularzu, szyfrowane wartości.
 
 ---
 
+### ✅ Zapamiętanie TOTP na 30 dni ("Zaufaj tej maszynie")
+
+Zaimplementowane — tabela `trusted_devices`, token UUID w keyring (`AegisVault.trusted / username`).
+Checkbox na ekranie TOTP w login_window → zapisuje token po udanej weryfikacji.
+Przy logowaniu: token z keyring → sprawdź w bazie → pomiń 2FA jeśli ważny.
+Sekcja "Zaufane urządzenia" w settings — lista z datą wygaśnięcia + usuń per urządzenie / usuń wszystkie.
+
+---
+
 ### ✅ TOTP authenticator wbudowany w wpisy
 
 Zaimplementowane — commit `eb166c7`.
@@ -337,12 +400,10 @@ EFF wordlist, slider słów, separator, capitalize, pasek entropii. Drugi tab w 
 
 ---
 
-### 🟡 Duplikowanie wpisu
+### ✅ Duplikowanie wpisu
 
-Zaimplementowane tylko w starym GUI (`gui/main_window.py` — Ctrl+D, `_do_duplicate()`).
-W `gui_qt/main_window.py` jest tylko skrót Ctrl+D bez pełnej implementacji.
-
-- [ ] Dokończyć `_duplicate_first()` w `gui_qt/main_window.py` — deep copy przez `db_manager`
+Zaimplementowane w obu GUI. `db_manager.duplicate_password()` — deep copy z custom fields i otp_secret.
+Qt: duplikuje zaznaczony wpis (lub pierwszy widoczny), Ctrl+D.
 
 ---
 
@@ -353,14 +414,13 @@ Przycisk kopiowania loginu obok przycisku hasła.
 
 ---
 
-### 🟠 KeePass KDBX import
+### ✅ KeePass KDBX import
 
-`import_manager.py` obsługuje LastPass, Bitwarden, 1Password, Generic CSV — brakuje KeePass.
-
-- [ ] Biblioteka `pykeepass` (`pip install pykeepass`) — czyta `.kdbx` v3 i v4
-- [ ] `_from_keepass(file_path, password)` — wymaga podania hasła do bazy KeePass w dialogu importu
-- [ ] Mapowanie: `entry.title`, `entry.username`, `entry.password`, `entry.url`, `entry.notes`, `entry.group.name` → category
-- [ ] Obsługa grup zagnieżdżonych → spłaszczenie do jednego poziomu kategorii
+Zaimplementowane — `utils/import_manager.py`, `_from_keepass()` + `ImportManager.import_keepass()`.
+Biblioteka `pykeepass` (dodana do `requirements.txt`).
+Mapowanie: title, username, password, url, notes, grupy → category (pełna ścieżka), OTP z custom properties.
+Dialog hasła KeePass w `main_window._import_keepass()`.
+Filter pliku `.kdbx` dodany do dialogu importu zewnętrznego.
 
 ---
 

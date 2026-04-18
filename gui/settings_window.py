@@ -1192,7 +1192,7 @@ class SettingsPanel(ctk.CTkFrame):
         if not verify_master_password(old_pwd, self.user.master_password_hash):
             show_error("Błąd", "Aktualne hasło jest nieprawidłowe!", parent=dialog)
             return
-        if not TOTPManager(secret=self.user.totp_secret).verify(totp_code):
+        if not TOTPManager(secret=self.db.get_totp_secret(self.user)).verify(totp_code):
             show_error("Błąd 2FA", "Nieprawidłowy kod 2FA!", parent=dialog)
             return
         try:
@@ -1361,9 +1361,8 @@ class SettingsPanel(ctk.CTkFrame):
                     err2.configure(text="Nieprawidłowy kod!")
                     entry_code.delete(0, "end")
                     return
-                self.user.totp_secret = new_totp.secret
+                self.db.set_totp_secret(self.user, new_totp.secret)
                 logger.info(f"Reset 2FA zakończony sukcesem: użytkownik={self.user.username}")
-                self.db.session.commit()
                 show_success("2FA zaktualizowane",
                              "Nowy kod QR zapisany.\nOd teraz używaj nowego kodu.",
                              parent=dialog)
@@ -1476,7 +1475,7 @@ class SettingsPanel(ctk.CTkFrame):
         if not verify_master_password(password, self.user.master_password_hash):
             show_error("Błąd", "Nieprawidłowe hasło masterowe!", parent=dialog)
             return
-        if not TOTPManager(secret=self.user.totp_secret).verify(totp_code):
+        if not TOTPManager(secret=self.db.get_totp_secret(self.user)).verify(totp_code):
             show_error("Błąd 2FA", "Nieprawidłowy kod 2FA!", parent=dialog)
             return
         if not ask_yes_no(
