@@ -141,11 +141,11 @@ jobs:
           name: pyinstaller-windows
           path: dist/AegisVault/
 
-      - name: Get version from manifest
+      - name: Get version from version.py
         id: version
         shell: pwsh
         run: |
-          $v = (Get-Content extension/manifest.json | ConvertFrom-Json).version
+          $v = (python -c "from version import APP_VERSION; print(APP_VERSION)")
           echo "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Install Inno Setup
@@ -163,33 +163,6 @@ jobs:
         with:
           name: installer-windows
           path: dist/AegisVault-Setup-*.exe
-
-  # ─────────────────────────────────────────────────────────────
-  # JOB 3: Instalator macOS (DMG)
-  # ─────────────────────────────────────────────────────────────
-  package-macos:
-    name: Package macOS DMG
-    needs: build
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download PyInstaller artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: pyinstaller-macos
-          path: dist/AegisVault.app/
-
-      - name: Build DMG
-        run: bash installer/macos/build_dmg.sh
-
-      - name: Upload DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: installer-macos
-          path: dist/AegisVault-*.dmg
 
   # ─────────────────────────────────────────────────────────────
   # JOB 4: Pakiet Linux (.deb)
@@ -225,43 +198,11 @@ jobs:
           path: dist/aegisvault_*.deb
 
   # ─────────────────────────────────────────────────────────────
-  # JOB 5: Rozszerzenie przeglądarkowe (ZIP)
-  # ─────────────────────────────────────────────────────────────
-  package-extension:
-    name: Package Browser Extension
-    runs-on: ubuntu-latest
-    # Niezależne od build — rozszerzenie nie wymaga PyInstaller
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check for polyfill
-        run: |
-          if [ ! -f extension/lib/browser-polyfill.js ]; then
-            echo "[WARN] browser-polyfill.js nie istnieje — pobieranie..."
-            mkdir -p extension/lib
-            curl -L -o extension/lib/browser-polyfill.js \
-              https://unpkg.com/webextension-polyfill@latest/dist/browser-polyfill.min.js
-          fi
-
-      - name: Package extension
-        run: bash installer/extension/build_extension.sh
-
-      - name: Upload extension ZIPs
-        uses: actions/upload-artifact@v4
-        with:
-          name: installer-extension
-          path: |
-            dist/extension-chrome-*.zip
-            dist/extension-firefox-*.zip
-
-  # ─────────────────────────────────────────────────────────────
   # JOB 6: GitHub Release (tylko dla tagów v*)
   # ─────────────────────────────────────────────────────────────
   release:
     name: Create GitHub Release
-    needs: [package-windows, package-macos, package-linux, package-extension]
+    needs: [package-windows, package-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -274,10 +215,7 @@ jobs:
         with:
           files: |
             installer-windows/AegisVault-Setup-*.exe
-            installer-macos/AegisVault-*.dmg
             installer-linux/aegisvault_*.deb
-            installer-extension/extension-chrome-*.zip
-            installer-extension/extension-firefox-*.zip
           generate_release_notes: true
           body: |
             ## AegisVault ${{ github.ref_name }}
@@ -287,10 +225,7 @@ jobs:
             | System | Plik | Opis |
             |--------|------|------|
             | Windows | `AegisVault-Setup-*.exe` | Instalator (Inno Setup) |
-            | macOS | `AegisVault-*.dmg` | Obraz dysku |
             | Linux | `aegisvault_*.deb` | Pakiet Debian/Ubuntu |
-            | Chrome/Edge | `extension-chrome-*.zip` | Rozszerzenie przeglądarki |
-            | Firefox | `extension-firefox-*.zip` | Rozszerzenie przeglądarki |
 
             ### Pierwsze uruchomienie
             Szczegółowa instrukcja instalacji: [INSTALLATION.md](https://github.com/${{ github.repository }}/blob/main/docs/INSTALLATION.md)
