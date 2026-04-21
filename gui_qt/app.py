@@ -47,7 +47,11 @@ def create_app() -> QApplication:
 
     # Czcionka systemowa z fallbackiem
     font = QFont()
-    font.setFamilies(["Segoe UI", "SF Pro Text", "Ubuntu", "Helvetica Neue", "sans-serif"])
+    font.setFamilies([
+        "Segoe UI", "SF Pro Text", "Ubuntu", "Helvetica Neue",
+        "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji",
+        "sans-serif",
+    ])
     font.setPointSize(10)
     _app.setFont(font)
 

@@ -5,11 +5,27 @@ Zmień APP_VERSION przy każdym wydaniu, aby klienci mogli wykryć aktualizację
 Format: MAJOR.MINOR.PATCH
 """
 
-APP_VERSION = "1.3.3"
+APP_VERSION = "1.3.4"
 
 # Historia wersji — lista (wersja, tytuł, [zmiany])
 # Najnowsza wersja na górze.
 VERSION_HISTORY = [
+    (
+        "1.3.4",
+        "Poprawki UI, stabilność, bugfixy",
+        [
+            "Naprawiono: animacja hexów w panelu ustawień nie uruchamiała się przy otwarciu",
+            "Naprawiono: przycisk 'Usuń' przy zaufanych urządzeniach był przycinany",
+            "Naprawiono: sprawdzanie wycieku hasła (HIBP) zatrzymywało się na 'Sprawdzanie...'",
+            "Naprawiono: aktualizacja aplikacji — przycisk nic nie robił po kliknięciu",
+            "Naprawiono: błąd TypeError (naive vs aware datetime) przy sprawdzaniu auto-backup",
+            "Naprawiono: błąd TypeError (naive vs aware datetime) przy odznakach wygaśnięcia haseł",
+            "Naprawiono: QPixmap null pixmap w splash screenie przy ścieżce względnej ikony",
+            "Naprawiono: wygenerowane hasła nie były czyszczone ze schowka po 30s",
+            "Splash screen: dłuższe wyświetlanie + okno aplikacji budowane w tle (brak lagów po zamknięciu)",
+            "Splash screen: więcej i częstsze świecenie hexagonów",
+        ],
+    ),
     (
         "1.3.3",
         "Wielojęzyczność EN/PL + splash screen",

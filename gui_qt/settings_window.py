@@ -76,7 +76,9 @@ class SettingsPanel(QWidget):
     """
 
     # Sygnały thread-safe (Windows Hello działa w osobnym wątku)
-    _wh_status_ready = pyqtSignal(str, bool)   # (availability_status, is_enabled)
+    _wh_status_ready   = pyqtSignal(str, bool)  # (availability_status, is_enabled)
+    _wh_enable_result  = pyqtSignal(str)        # "ok" | "verify_fail" | "store_fail"
+    _wh_disable_result = pyqtSignal(str)        # "ok" | "verify_fail"
 
     def __init__(
         self,
@@ -101,11 +103,15 @@ class SettingsPanel(QWidget):
         self._anim: QPropertyAnimation | None = None
 
         self._wh_status_ready.connect(self._wh_update_ui)
+        self._wh_enable_result.connect(self._on_wh_enable_result)
+        self._wh_disable_result.connect(self._on_wh_disable_result)
+        self._wh_pending_dialog = None
 
         self._build_ui()
 
         from gui_qt.hex_background import HexBackground
-        self._hex_bg = HexBackground(self, hex_size=32, glow_max=2, glow_interval_ms=2000)
+        self._hex_bg = HexBackground(self, hex_size=32, glow_max=4, glow_interval_ms=800,
+                                     animate=True)
         self._hex_bg.setGeometry(0, 0, self.width(), self.height())
         self._hex_bg.lower()
 
@@ -114,10 +120,9 @@ class SettingsPanel(QWidget):
     def paintEvent(self, event):
         """Gwarantuje pełne, nieprzezroczyste tło — QSS na child QWidget bywa zawodny."""
         from PyQt6.QtGui import QPainter, QColor
-        dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"
-        bg = "#1a1a1a" if dark else "#f5f5f5"
+        bg = getattr(self, "_cached_bg", "#1a1a1a")
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(bg))
+        painter.fillRect(event.rect(), QColor(bg))
         painter.end()
 
     def slide_in(self, main_window: QWidget) -> None:
@@ -136,6 +141,7 @@ class SettingsPanel(QWidget):
         if hasattr(self, '_hex_bg') and self._hex_bg:
             self._hex_bg.setGeometry(0, 0, mw, mh)
             self._hex_bg.lower()
+            self._hex_bg._rebuild()   # wymuś natychmiastowy rebuild (bez debounce)
 
         self._anim = QPropertyAnimation(self, b"geometry")
         self._anim.setDuration(220)
@@ -144,8 +150,18 @@ class SettingsPanel(QWidget):
         self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._anim.start()
 
-    def slide_out(self) -> None:
+    def slide_out(self, on_hidden=None) -> None:
         """Wysuwa panel poza prawy ekran i chowa po zakończeniu."""
+        for attr in ("_hdr_sep", "_hex_bg"):
+            widget = getattr(self, attr, None)
+            if widget and hasattr(widget, "stop_animation"):
+                try:
+                    widget.stop_animation()
+                except Exception:
+                    pass
+        if hasattr(self, "_hex_debounce") and self._hex_debounce.isActive():
+            self._hex_debounce.stop()
+
         w = self.width()
         h = self.height()
         cur = self.geometry()
@@ -155,7 +171,16 @@ class SettingsPanel(QWidget):
         self._anim.setStartValue(cur)
         self._anim.setEndValue(QRect(w, cur.y(), w, h))
         self._anim.setEasingCurve(QEasingCurve.Type.InCubic)
-        self._anim.finished.connect(self.hide)
+
+        def _on_done():
+            self.hide()
+            if on_hidden:
+                try:
+                    on_hidden()
+                except Exception:
+                    pass
+
+        self._anim.finished.connect(_on_done)
         self._anim.start()
 
     def resizeEvent(self, event):
@@ -174,9 +199,10 @@ class SettingsPanel(QWidget):
         hdr_bg  = "#1e1e1e" if dark else "#f0f0f0"
         sep_clr = "#2a2a2a" if dark else "#d0d0d0"
 
+        self._cached_bg = bg
         self.setObjectName("SettingsPanel")
-        # WA_StyledBackground wymagane żeby QSS background działał na QWidget
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
         self.setStyleSheet(f"#SettingsPanel {{ background: {bg}; }}")
 
         root = QVBoxLayout(self)
@@ -1358,6 +1384,7 @@ class SettingsPanel(QWidget):
         )
         sep.setFixedHeight(2)
         sep.start_animation()
+        dialog.finished.connect(sep.stop_animation)
         vl.addWidget(sep)
 
         info = QLabel("Potwierdź hasłem masterowym,\naby skojarzyć konto z Windows Hello.")
@@ -1404,9 +1431,10 @@ class SettingsPanel(QWidget):
             confirm_btn.setEnabled(False)
             confirm_btn.setText("Oczekiwanie…")
             err_lbl.setText("")
+            self._wh_pending_dialog = dialog
             threading.Thread(
                 target=self._wh_do_enable,
-                args=(dialog, entry_pwd.text()),
+                args=(entry_pwd.text(),),
                 daemon=True,
             ).start()
 
@@ -1414,27 +1442,32 @@ class SettingsPanel(QWidget):
         entry_pwd.returnPressed.connect(_confirm)
         dialog.exec()
 
-    def _wh_do_enable(self, dialog: QDialog, master_password: str) -> None:
+    def _wh_do_enable(self, master_password: str) -> None:
         verified = wh.verify("Włącz Windows Hello dla AegisVault")
         if not verified:
-            QTimer.singleShot(0, lambda: show_error(
-                "Windows Hello", "Weryfikacja anulowana lub nieudana.\nSpróbuj ponownie.", parent=self
-            ))
+            self._wh_enable_result.emit("verify_fail")
             return
         ok = wh.store_credential(self.user.username, master_password)
         if ok:
             wh.invalidate_cache()
-            QTimer.singleShot(0, lambda: (
-                dialog.accept(),
-                show_success("Windows Hello",
-                             "Windows Hello zostało włączone.\nMożesz teraz logować się bez hasła.",
-                             parent=self),
-                self._wh_update_ui("Available", True),
-            ))
+            self._wh_enable_result.emit("ok")
         else:
-            QTimer.singleShot(0, lambda: show_error(
-                "Błąd", "Nie można zapisać poświadczeń w Credential Manager.", parent=self
-            ))
+            self._wh_enable_result.emit("store_fail")
+
+    def _on_wh_enable_result(self, result: str) -> None:
+        dialog = self._wh_pending_dialog
+        self._wh_pending_dialog = None
+        if result == "verify_fail":
+            show_error("Windows Hello", "Weryfikacja anulowana lub nieudana.\nSpróbuj ponownie.", parent=self)
+        elif result == "ok":
+            if dialog:
+                dialog.accept()
+            show_success("Windows Hello",
+                         "Windows Hello zostało włączone.\nMożesz teraz logować się bez hasła.",
+                         parent=self)
+            self._wh_update_ui("Available", True)
+        elif result == "store_fail":
+            show_error("Błąd", "Nie można zapisać poświadczeń w Credential Manager.", parent=self)
 
     def _wh_disable(self) -> None:
         if not ask_yes_no(
@@ -1450,20 +1483,22 @@ class SettingsPanel(QWidget):
         def _do() -> None:
             verified = wh.verify("Wyłącz Windows Hello — AegisVault")
             if not verified:
-                QTimer.singleShot(0, lambda: (
-                    self._wh_disable_btn.setEnabled(True),
-                    self._wh_disable_btn.setText(t("common.disable")),
-                    show_error("Windows Hello", "Weryfikacja nieudana lub anulowana.", parent=self),
-                ))
+                self._wh_disable_result.emit("verify_fail")
                 return
             wh.delete_credential(self.user.username)
             wh.invalidate_cache()
-            QTimer.singleShot(0, lambda: (
-                show_success("Windows Hello", "Windows Hello zostało wyłączone.", parent=self),
-                self._wh_update_ui("Available", False),
-            ))
+            self._wh_disable_result.emit("ok")
 
         threading.Thread(target=_do, daemon=True).start()
+
+    def _on_wh_disable_result(self, result: str) -> None:
+        if result == "verify_fail":
+            self._wh_disable_btn.setEnabled(True)
+            self._wh_disable_btn.setText(t("common.disable"))
+            show_error("Windows Hello", "Weryfikacja nieudana lub anulowana.", parent=self)
+        elif result == "ok":
+            show_success("Windows Hello", "Windows Hello zostało wyłączone.", parent=self)
+            self._wh_update_ui("Available", False)
 
     # ══════════════════════════════════════════════════════════════════
     # LOGIKA — ZMIANA HASŁA
@@ -1561,7 +1596,7 @@ class SettingsPanel(QWidget):
                 row = QWidget()
                 row.setStyleSheet("background:transparent; border:none;")
                 rl = QHBoxLayout(row)
-                rl.setContentsMargins(0, 0, 0, 0)
+                rl.setContentsMargins(0, 3, 0, 6)
                 rl.setSpacing(8)
                 from datetime import timezone as _tz
                 exp = dev.expires_at
@@ -1575,10 +1610,11 @@ class SettingsPanel(QWidget):
                 name_lbl.setTextFormat(Qt.TextFormat.RichText)
                 rl.addWidget(name_lbl, stretch=1)
                 del_btn = QPushButton("Usuń")
-                del_btn.setFixedSize(56, 26)
+                del_btn.setFixedHeight(26)
+                del_btn.setMinimumWidth(72)
                 del_btn.setStyleSheet(
                     "background:#3a1a1a; color:#e05252; border:1px solid #5a2a2a;"
-                    "border-radius:5px; font-size:11px;"
+                    "border-radius:5px; font-size:11px; padding: 0 10px;"
                 )
                 dev_id = dev.id
                 del_btn.clicked.connect(
@@ -1636,6 +1672,7 @@ class SettingsPanel(QWidget):
         )
         sep.setFixedHeight(2)
         sep.start_animation()
+        dialog.finished.connect(sep.stop_animation)
         vl.addWidget(sep)
 
         has_totp = self.db.has_totp(self.user)
@@ -1735,6 +1772,7 @@ class SettingsPanel(QWidget):
         )
         sep1.setFixedHeight(2)
         sep1.start_animation()
+        dialog.finished.connect(sep1.stop_animation)
         s1l.addWidget(sep1)
 
         info1 = QLabel("Potwierdź tożsamość hasłem masterowym,\naby wygenerować nowy kod QR.")
@@ -1786,6 +1824,7 @@ class SettingsPanel(QWidget):
         )
         sep2.setFixedHeight(2)
         sep2.start_animation()
+        dialog.finished.connect(sep2.stop_animation)
         s2l.addWidget(sep2)
 
         info2 = QLabel("Zeskanuj nowy kod QR w aplikacji\nuwierzytelniającej i wpisz kod.")
@@ -1996,6 +2035,7 @@ class SettingsPanel(QWidget):
         )
         sep.setFixedHeight(2)
         sep.start_animation()
+        dialog.finished.connect(sep.stop_animation)
         vl.addWidget(sep)
 
         warn = QLabel("Ta operacja jest nieodwracalna!\n"

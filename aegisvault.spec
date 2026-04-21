@@ -205,8 +205,8 @@ elif sys.platform == "darwin":
         icon=icon_path,
         bundle_identifier="pl.aegisvault.AegisVault",
         info_plist={
-            "CFBundleShortVersionString": "1.3.3",
-            "CFBundleVersion": "1.3.3",
+            "CFBundleShortVersionString": "1.3.4",
+            "CFBundleVersion": "1.3.4",
             "NSHighResolutionCapable": True,
         },
     )
@@ -225,7 +225,7 @@ else:
         upx=True,
         console=False,
         icon=icon_path,
-        version_file=None,
+        version_file="installer/windows/file_version_info.txt",
     )
     coll = COLLECT(
         exe,

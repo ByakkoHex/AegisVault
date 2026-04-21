@@ -91,17 +91,25 @@ def _glow_curve(step: int, steps: int, mode: str) -> float:
     return math.sin(math.pi * t)
 
 
+_PREFS_INSTANCE: PrefsManager | None = None
+
+def _prefs() -> PrefsManager:
+    global _PREFS_INSTANCE
+    if _PREFS_INSTANCE is None:
+        _PREFS_INSTANCE = PrefsManager()
+    return _PREFS_INSTANCE
+
+
 def _get_accent() -> str:
     try:
-        return PrefsManager().get_accent()
+        return _prefs().get_accent()
     except Exception:
         return _DARK_GLOW_FB
 
 
 def _is_dark_mode() -> bool:
     try:
-        from utils.prefs_manager import PrefsManager
-        return (PrefsManager().get("appearance_mode") or "dark").lower() != "light"
+        return (_prefs().get("appearance_mode") or "dark").lower() != "light"
     except Exception:
         return True
 
@@ -186,12 +194,11 @@ class HexBackground(QWidget):
         self.update()
 
     def update_accent(self, new_accent: str | None = None) -> None:
+        self._accent_cache = new_accent or _get_accent()
         self.update()
 
     def update_theme(self) -> None:
-        dark = _is_dark_mode()
-        self._bg_color = _DARK_BG if dark else _LIGHT_BG
-        self._rebuild()
+        self._rebuild()  # regenerates _grid_pixmap with correct colors
 
     # ── Geometria ────────────────────────────────────────────────────
 
@@ -225,6 +232,16 @@ class HexBackground(QWidget):
             for row in range(-1, int(h / row_step) + 3):
                 cy = row * row_step + y_off
                 self._hex_centers.append((cx, cy))
+
+        # Pre-compute polygons and cache base pen — no per-frame allocations
+        r = size - 2
+        self._hex_polys: list[QPolygonF] = [
+            QPolygonF(list(_hex_pts(cx, cy, r))) for cx, cy in self._hex_centers
+        ]
+        base_pen = QPen(QColor(hex_col))
+        base_pen.setWidth(2)
+        self._base_pen = base_pen
+        self._accent_cache = _get_accent()
 
         eff_max = max(self._base_max,
                       min(self._base_max * 8,
@@ -294,36 +311,33 @@ class HexBackground(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # Tło
         painter.fillRect(self.rect(), QColor(self._bg_color))
 
-        if not self._hex_centers:
+        polys    = getattr(self, "_hex_polys", None)
+        base_pen = getattr(self, "_base_pen", None)
+        if not polys or not base_pen:
             painter.end()
             return
 
-        hex_col   = getattr(self, "_hex_col", _DARK_HEX)
-        accent    = _get_accent()
-        size      = self._hex_size
-        pen_width = 2
+        hex_col = getattr(self, "_hex_col", _DARK_HEX)
+        accent  = getattr(self, "_accent_cache", None) or _get_accent()
+        glowing = self._glowing
 
-        for idx, (cx, cy) in enumerate(self._hex_centers):
-            # Kolor outlines tego hexa
-            if idx in self._glowing:
-                step, steps_total, intensity = self._glowing[idx]
+        painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        painter.setPen(base_pen)
+
+        for idx, poly in enumerate(polys):
+            if idx in glowing:
+                step, steps_total, intensity = glowing[idx]
                 t   = _glow_curve(step, steps_total, self._glow_mode) * intensity
                 col = _lerp_hex(hex_col, accent, t)
+                pen = QPen(QColor(col))
+                pen.setWidth(2)
+                painter.setPen(pen)
+                painter.drawPolygon(poly)
+                painter.setPen(base_pen)
             else:
-                col = hex_col
-
-            pen = QPen(QColor(col))
-            pen.setWidth(pen_width)
-            painter.setPen(pen)
-            painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-
-            pts = _hex_pts(cx, cy, size - 2)
-            poly = QPolygonF(list(pts))
-            painter.drawPolygon(poly)
+                painter.drawPolygon(poly)
 
         painter.end()
 

@@ -82,7 +82,10 @@ class Password(Base):
         """Zwraca 'expired', 'soon' (≤7 dni), 'ok', lub None."""
         if not self.expires_at:
             return None
-        delta = (self.expires_at - datetime.now(timezone.utc)).days
+        exp = self.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        delta = (exp - datetime.now(timezone.utc)).days
         if delta < 0:
             return "expired"
         if delta <= 7:

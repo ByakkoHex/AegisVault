@@ -1,0 +1,28 @@
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 3, 4, 0),
+    prodvers=(1, 3, 4, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u'AegisVault'),
+        StringStruct(u'FileDescription', u'AegisVault \u2014 Mened\u017cer hase\u0142'),
+        StringStruct(u'FileVersion', u'1.3.4.0'),
+        StringStruct(u'InternalName', u'AegisVault'),
+        StringStruct(u'LegalCopyright', u'Copyright \u00a9 2024\u20132026 AegisVault'),
+        StringStruct(u'OriginalFilename', u'AegisVault.exe'),
+        StringStruct(u'ProductName', u'AegisVault'),
+        StringStruct(u'ProductVersion', u'1.3.4.0')])
+      ]),
+    VarFileInfo([VarStruct(u'Translation', [0x0415, 1200])])
+  ]
+)

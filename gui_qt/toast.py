@@ -146,12 +146,14 @@ class _Toast(QWidget):
         dy      = (target_y - current.y()) / steps
 
         def _tick(step=0, y=float(current.y())):
-            if step >= steps:
-                self.move(current.x(), target_y)
-                return
-            new_y = int(y + dy)
-            self.move(current.x(), new_y)
-            QTimer.singleShot(step_ms, lambda: _tick(step + 1, y + dy))
+            try:
+                if step >= steps:
+                    self.move(current.x(), target_y)
+                    return
+                self.move(current.x(), int(y + dy))
+                QTimer.singleShot(step_ms, lambda: _tick(step + 1, y + dy))
+            except RuntimeError:
+                pass  # widget już zniszczony
 
         _tick()
 

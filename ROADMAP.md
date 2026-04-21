@@ -4,7 +4,26 @@ Poniżej rozpisane kierunki rozwoju projektu po wersji 1.0.
 
 ---
 
-## 1. Wtyczka przeglądarkowa
+## 1. Natywna wersja macOS
+
+Aplikacja działa jako `.app` bundle (PyInstaller), ale wymaga dopracowania przed publiczną dystrybucją.
+
+### Problemy do rozwiązania
+
+- [ ] **Gatekeeper** — aplikacja blokowana jako „nieznany deweloper"; docelowo podpisanie kodu (Apple Developer ID) + notaryzacja
+- [ ] Tymczasowe obejście: skrypt `.command` „Zezwól na uruchomienie" — zastąpić właściwym codesigning
+- [ ] Wygląd UI — fonty, odstępy i zaokrąglenia wyglądają inaczej niż na Windows; wymaga testów i korekty
+- [ ] HiDPI / Retina — skalowanie ikon i hexagonów do weryfikacji na ekranach 2×
+- [ ] Windows Hello → zastąpić **Touch ID** (`LocalAuthentication` framework)
+- [ ] Autostart → `LaunchAgent` plist zamiast rejestru Windows
+- [ ] Tray icon — `pystray` na macOS wymaga oddzielnego wątku dla `AppKit`
+- [ ] Przetestować na macOS 13 Ventura, 14 Sonoma, 15 Sequoia
+- [ ] DMG z tłem graficznym + animacją „przeciągnij do Applications"
+- [ ] Podpisanie kodu (Apple Developer ID) — wymagane do normalnej dystrybucji poza App Store
+
+---
+
+## 2. Wtyczka przeglądarkowa *(szkielet gotowy — w trakcie dopracowania)*
 
 Szkielet już istnieje w `extension/` i `native_host/`, ale nie był jeszcze rozwijany.
 
@@ -30,7 +49,7 @@ Szkielet już istnieje w `extension/` i `native_host/`, ale nie był jeszcze roz
 
 ---
 
-## 2. Aplikacja mobilna
+## 3. Aplikacja mobilna
 
 Nowa aplikacja, niezależna od desktopa — synchronizacja przez wspólny serwer.
 
@@ -67,7 +86,7 @@ Nowa aplikacja, niezależna od desktopa — synchronizacja przez wspólny serwer
 
 ---
 
-## 3. Rejestracja przez email + weryfikacja SMS
+## 4. Rejestracja przez email + weryfikacja SMS
 
 Dotyczy zarówno serwera publicznego jak i self-hosted.
 
@@ -109,7 +128,7 @@ Dotyczy zarówno serwera publicznego jak i self-hosted.
 
 ---
 
-## 4. Publiczny serwer AegisVault
+## 5. Publiczny serwer AegisVault
 
 Zamiast każdy hostuje lokalnie — jeden serwer w chmurze, każdy ma swoje konto.
 
@@ -185,5 +204,6 @@ Zachować możliwość **self-hosted** dla zaawansowanych użytkowników — `se
 [2] Rejestracja emailem     ← żeby można było tworzyć konta online
 [3] SMS 2FA                 ← bezpieczeństwo kont
 [4] Wtyczka przeglądarkowa  ← największy wzrost użyteczności na desktopie
-[5] Aplikacja mobilna       ← największy nakład pracy, ale i zasięgu
+[5] Natywna wersja macOS    ← podpisanie kodu + dopracowanie UI
+[6] Aplikacja mobilna       ← największy nakład pracy, ale i zasięgu
 ```

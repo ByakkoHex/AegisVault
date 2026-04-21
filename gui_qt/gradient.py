@@ -238,7 +238,7 @@ class AnimatedGradientWidget(GradientWidget):
 
         slide = self._phase / (2 * math.pi)  # 0.0 → 1.0
 
-        N = 64   # liczba stop-ów gradientu — Qt interpoluje między nimi
+        N = 32   # liczba stop-ów gradientu — Qt interpoluje między nimi
         for i in range(N + 1):
             t = i / N
             if self._reverse:

@@ -6,10 +6,13 @@ Tło: HexBackground z animacją "breath".
 Zawiera: logo, nazwa, wersja, pasek postępu, status, copyright.
 """
 
+import os
 import sys
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
 from PyQt6.QtCore    import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtProperty
 from PyQt6.QtGui     import QPixmap, QPainter, QColor, QFont, QPen
+
+_ASSETS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "assets"))
 
 from gui_qt.hex_background import HexBackground
 from utils.prefs_manager   import PrefsManager
@@ -85,8 +88,8 @@ class SplashScreen(QWidget):
         self._hex_bg = HexBackground(
             self,
             hex_size=28,
-            glow_max=6,
-            glow_interval_ms=600,
+            glow_max=12,
+            glow_interval_ms=200,
             glow_mode="breath",
         )
         self._hex_bg.setGeometry(0, 0, self.width(), self.height())
@@ -109,14 +112,15 @@ class SplashScreen(QWidget):
         top_row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         icon_lbl = QLabel()
-        try:
-            px = QPixmap("assets/icon.png").scaled(
+        _icon_path = os.path.join(_ASSETS_DIR, "icon.png")
+        px = QPixmap(_icon_path)
+        if not px.isNull():
+            icon_lbl.setPixmap(px.scaled(
                 64, 64,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
-            )
-            icon_lbl.setPixmap(px)
-        except Exception:
+            ))
+        else:
             icon_lbl.setText("🛡")
             icon_lbl.setStyleSheet("font-size: 52px;")
         icon_lbl.setFixedSize(68, 68)

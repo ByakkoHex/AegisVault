@@ -35,8 +35,10 @@ def should_backup(prefs) -> bool:
         return True
     try:
         last = datetime.fromisoformat(last_str)
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
         return datetime.now(timezone.utc) - last >= interval
-    except ValueError:
+    except (ValueError, TypeError):
         return True
 
 

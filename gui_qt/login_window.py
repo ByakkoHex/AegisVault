@@ -86,6 +86,8 @@ class LoginWindow(QWidget):
     _push_started  = pyqtSignal(str, str)       # token, url
     _push_error    = pyqtSignal(str)
     _push_status   = pyqtSignal(str)            # "approved" | "denied" | "expired" | "pending"
+    _reset_ok      = pyqtSignal(bool)           # data_kept
+    _reset_err     = pyqtSignal(str)            # error message
 
     # Emitowany po udanym logowaniu w trybie embedded (zamiast zamykania okna)
     login_success  = pyqtSignal(object, object, object)   # user, crypto, db
@@ -854,6 +856,8 @@ class LoginWindow(QWidget):
         self._push_error.connect(lambda msg: self._push_status_lbl.setText(f"❌ {msg}"))
         self._push_status.connect(self._on_push_poll_result)
         self._push_poll_timer.timeout.connect(self._poll_push)
+        self._reset_ok.connect(self._after_reset_success)
+        self._reset_err.connect(self._after_reset_error)
 
     # ── Nawigacja między widokami ─────────────────────────────────────
 
@@ -1038,10 +1042,11 @@ class LoginWindow(QWidget):
 
                 self.crypto      = new_crypto
                 self.logged_user = user
-                QTimer.singleShot(0, lambda: self._after_reset_success(data_kept))
+                self._reset_ok.emit(data_kept)
             except Exception as e:
                 self.db.session.rollback()
-                QTimer.singleShot(0, lambda: self._after_reset_error(str(e)))
+                err_msg = str(e)
+                self._reset_err.emit(err_msg)
 
         threading.Thread(target=_do_reset, daemon=True).start()
 

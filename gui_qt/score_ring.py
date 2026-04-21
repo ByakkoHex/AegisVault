@@ -63,6 +63,11 @@ class AnimatedScoreRing(QWidget):
         self.setFixedSize(size, size)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        # Pre-cached font (never changes after init)
+        font_size = max(7, size // 5)
+        self._font = QFont("Segoe UI", font_size)
+        self._font.setBold(True)
+
         # Timer dla animacji łuku (~60fps)
         self._anim_timer = QTimer(self)
         self._anim_timer.setInterval(16)
@@ -79,8 +84,22 @@ class AnimatedScoreRing(QWidget):
         """Animuje łuk do nowej wartości score (0-100)."""
         self._score  = max(0, min(100, score))
         self._target = self._score / 100.0 * 359.9
+        self._rebuild_arc_pens()
         if not self._anim_timer.isActive():
             self._anim_timer.start()
+
+    _N_SEGS = 30  # reduced from 60 — still smooth, half the allocations
+
+    def _rebuild_arc_pens(self) -> None:
+        arc_w = max(3, self._sz // 9)
+        self._arc_w = arc_w
+        pens = []
+        for i in range(self._N_SEGS):
+            pen = QPen(QColor(_score_color(int(i / self._N_SEGS * 100))))
+            pen.setWidth(arc_w)
+            pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+            pens.append(pen)
+        self._arc_pens: list[QPen] = pens
 
     def start_pulse(self) -> None:
         """Uruchamia subtelne pulsowanie."""
@@ -134,16 +153,19 @@ class AnimatedScoreRing(QWidget):
 
         # ── Tor (szare pełne koło) ──────────────────────────────────
         track_color = _ARC_TRACK_DARK if self._is_dark else _ARC_TRACK_LIGHT
-        pen = QPen(QColor(track_color))
-        pen.setWidth(arc_w)
-        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-        painter.setPen(pen)
-        # Qt: kąty w 1/16 stopnia, start=90° (góra), pełne koło = -360*16
+        track_pen = QPen(QColor(track_color))
+        track_pen.setWidth(arc_w)
+        track_pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+        painter.setPen(track_pen)
         painter.drawArc(rect.toRect(), 90 * 16, -360 * 16)
 
-        # ── Łuk postępu z gradientem ─────────────────────────────────
+        # ── Łuk postępu z gradientem (pre-cached pens) ───────────────
         if self._displayed > 0.5:
-            N = 60   # segmentów gradientu
+            arc_pens = getattr(self, "_arc_pens", None)
+            N = self._N_SEGS if arc_pens else 30
+            if not arc_pens:
+                self._rebuild_arc_pens()
+                arc_pens = self._arc_pens
             seg_angle = self._displayed / N
 
             for i in range(N):
@@ -154,15 +176,14 @@ class AnimatedScoreRing(QWidget):
                 if extent <= 0:
                     break
 
-                color_str = _score_color(int(i / N * 100))
-                # Pulse: rozjaśnienie
                 if pulse > 0:
-                    color_str = _lerp_str(color_str, "#ffffff", pulse)
-
-                pen = QPen(QColor(color_str))
-                pen.setWidth(arc_w)
-                pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-                painter.setPen(pen)
+                    color_str = _lerp_str(_score_color(int(i / N * 100)), "#ffffff", pulse)
+                    pen = QPen(QColor(color_str))
+                    pen.setWidth(arc_w)
+                    pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+                    painter.setPen(pen)
+                else:
+                    painter.setPen(arc_pens[i])
 
                 qt_start  = int((90 - seg_start) * 16)
                 qt_extent = int(-extent * 16)
@@ -170,10 +191,7 @@ class AnimatedScoreRing(QWidget):
 
         # ── Tekst w centrum ──────────────────────────────────────────
         score_str = str(self._score) if self._score > 0 else "--"
-        font_size = max(7, s // 5)
-        font = QFont("Segoe UI", font_size)
-        font.setBold(True)
-        painter.setFont(font)
+        painter.setFont(self._font)
 
         if self._score > 0:
             text_color = _score_color(self._score)
