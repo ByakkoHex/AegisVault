@@ -5,19 +5,25 @@ Zmień APP_VERSION przy każdym wydaniu, aby klienci mogli wykryć aktualizację
 Format: MAJOR.MINOR.PATCH
 """
 
-APP_VERSION = "1.3.5"
+APP_VERSION = "1.4.0"
 
 # Historia wersji — lista (wersja, tytuł, [zmiany])
 # Najnowsza wersja na górze.
 VERSION_HISTORY = [
     (
-        "1.3.5",
-        "Poprawki CI/CD i aktualizator",
+        "1.4.0",
+        "Bezpieczeństwo — Argon2id, AES-256, Zero-knowledge",
         [
+            "Szyfrowanie: migracja KDF z PBKDF2+bcrypt na Argon2id (time=3, mem=64 MB, par=4) — standard OWASP 2023",
+            "Szyfrowanie: wszystkie hasła chronione AES-256 (Fernet) z kluczem derywowanym per-użytkownik",
+            "Architektura zero-knowledge: hasło masterowe nigdy nie opuszcza urządzenia w postaci jawnej",
+            "Auto-migracja: konta z PBKDF2 automatycznie migrowane do Argon2id przy pierwszym logowaniu",
+            "Recovery key: klucz odzyskiwania derywowany przez osobną instancję Argon2id (time=2, mem=32 MB)",
+            "PIN (szybkie odblokowanie): hash PIN-u przechowywany jako Argon2id, nigdy plaintext",
             "Naprawiono: przycisk aktualizacji w topbarze nie otwierał dropdownu (Qt Popup → Tool window)",
             "Naprawiono: CI/CD — usunięto brakujące joby macOS DMG i rozszerzenie przeglądarki",
             "Naprawiono: odczyt wersji w instalatorze Windows (z version.py zamiast manifest.json)",
-            "Naprawiono: installer Windows — usunięto referencje do nieistniejącego katalogu native_host",
+            "Naprawiono: installer Windows — usunięto referencje do nieistniejącego native_host",
         ],
     ),
     (
