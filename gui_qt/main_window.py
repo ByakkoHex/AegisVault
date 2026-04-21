@@ -2611,7 +2611,11 @@ class MainWindow(QMainWindow):
     # ── Update ────────────────────────────────────────────────────────
 
     def _bg_check_update(self):
-        info = check_for_update()
+        try:
+            info = check_for_update()
+        except Exception as e:
+            logger.error(f"check_for_update failed: {e}")
+            info = None
         if info:
             self._update_found_sig.emit(info)
         else:

@@ -5,11 +5,20 @@ Zmień APP_VERSION przy każdym wydaniu, aby klienci mogli wykryć aktualizację
 Format: MAJOR.MINOR.PATCH
 """
 
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 
 # Historia wersji — lista (wersja, tytuł, [zmiany])
 # Najnowsza wersja na górze.
 VERSION_HISTORY = [
+    (
+        "1.4.1",
+        "Poprawka sprawdzania aktualizacji",
+        [
+            "Naprawiono: sprawdzanie nowych wersji nie działało gdy CI nie ukończyło joba release",
+            "Dodano fallback do GitHub Tags API — wykrywa nowe wersje zaraz po pushu tagu",
+            "Dodano logowanie błędów sprawdzania aktualizacji",
+        ],
+    ),
     (
         "1.4.0",
         "Bezpieczeństwo — Argon2id, AES-256, Zero-knowledge",
