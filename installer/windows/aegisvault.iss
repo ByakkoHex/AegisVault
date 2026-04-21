@@ -66,22 +66,13 @@ Name: "polish";   MessagesFile: "compiler:Languages\Polish.isl"
 Name: "english";  MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon";      Description: "Utwórz ikonę na pulpicie";                          GroupDescription: "Ikony:";                Flags: checkedonce
-Name: "autostart";        Description: "Uruchamiaj AegisVault automatycznie po zalogowaniu"; GroupDescription: "Uruchamianie:";         Flags: unchecked
-Name: "register_browser"; Description: "Zarejestruj wtyczkę przeglądarkową (autouzupełnianie)"; GroupDescription: "Integracja:";       Flags: unchecked
+Name: "desktopicon"; Description: "Utwórz ikonę na pulpicie";                          GroupDescription: "Ikony:";        Flags: checkedonce
+Name: "autostart";   Description: "Uruchamiaj AegisVault automatycznie po zalogowaniu"; GroupDescription: "Uruchamianie:"; Flags: unchecked
 
 [Files]
 ; Główna aplikacja — cały bundle PyInstaller (Python + biblioteki wbudowane)
 Source: "{#ProjectRoot}dist\AegisVault\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Native host — dla opcjonalnej integracji z przeglądarką
-Source: "{#ProjectRoot}native_host\*";  DestDir: "{app}\native_host"; Flags: ignoreversion recursesubdirs createallsubdirs; Tasks: register_browser
-Source: "{#ProjectRoot}core\*";         DestDir: "{app}\core";        Flags: ignoreversion recursesubdirs createallsubdirs; Tasks: register_browser
-Source: "{#ProjectRoot}database\*";     DestDir: "{app}\database";    Flags: ignoreversion recursesubdirs createallsubdirs; Tasks: register_browser
-Source: "{#ProjectRoot}utils\*";        DestDir: "{app}\utils";       Flags: ignoreversion recursesubdirs createallsubdirs; Tasks: register_browser
-
-; Skrypt PowerShell do rejestracji native host (opcjonalny)
-Source: "{#ProjectRoot}installer\windows\post_install.ps1";   DestDir: "{app}"; Flags: ignoreversion; Tasks: register_browser
 ; Skrypt czyszczenia przy deinstalacji (zawsze dołączany)
 Source: "{#ProjectRoot}installer\windows\post_uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -93,13 +84,6 @@ Name: "{commondesktop}\{#AppName}";    Filename: "{app}\{#AppExeName}"; Tasks: d
 Name: "{userstartup}\{#AppName}";      Filename: "{app}\{#AppExeName}"; Tasks: autostart
 
 [Run]
-; Rejestracja native messaging host (opcjonalna, tylko jeśli zaznaczono)
-Filename: "powershell.exe"; \
-  Parameters: "-ExecutionPolicy Bypass -File ""{app}\post_install.ps1"" ""{app}"""; \
-  Flags: runhidden waituntilterminated; \
-  Tasks: register_browser; \
-  StatusMsg: "Rejestrowanie integracji z przeglądarką..."
-
 ; Opcjonalne uruchomienie po instalacji
 Filename: "{app}\{#AppExeName}"; \
   Description: "Uruchom {#AppName} teraz"; \
