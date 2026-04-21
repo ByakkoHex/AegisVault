@@ -5,11 +5,21 @@ Zmień APP_VERSION przy każdym wydaniu, aby klienci mogli wykryć aktualizację
 Format: MAJOR.MINOR.PATCH
 """
 
-APP_VERSION = "1.3.4"
+APP_VERSION = "1.3.5"
 
 # Historia wersji — lista (wersja, tytuł, [zmiany])
 # Najnowsza wersja na górze.
 VERSION_HISTORY = [
+    (
+        "1.3.5",
+        "Poprawki CI/CD i aktualizator",
+        [
+            "Naprawiono: przycisk aktualizacji w topbarze nie otwierał dropdownu (Qt Popup → Tool window)",
+            "Naprawiono: CI/CD — usunięto brakujące joby macOS DMG i rozszerzenie przeglądarki",
+            "Naprawiono: odczyt wersji w instalatorze Windows (z version.py zamiast manifest.json)",
+            "Naprawiono: installer Windows — usunięto referencje do nieistniejącego katalogu native_host",
+        ],
+    ),
     (
         "1.3.4",
         "Poprawki UI, stabilność, bugfixy",

@@ -2635,7 +2635,8 @@ class MainWindow(QMainWindow):
         try:
             from gui_qt.update_dialog import UpdateDropdown
             UpdateDropdown(self, self._update_info, self._update_btn)
-        except Exception:
+        except Exception as e:
+            logger.error(f"UpdateDropdown error: {e}")
             url = self._update_info.get("download_url", "")
             if url:
                 webbrowser.open(url)

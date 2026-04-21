@@ -212,14 +212,16 @@ class UpdateDropdown(QFrame):
     WIDTH = 320
 
     def __init__(self, parent: QWidget, update_info: dict, anchor_widget: QWidget):
-        # Rodzic to okno główne — panel jest nad nim
-        super().__init__(parent, Qt.WindowType.Popup)
+        super().__init__(parent)
         self._info = update_info
         self.setFixedWidth(self.WIDTH)
+        # Tool zamiast Popup — Popup na Windows zamyka się natychmiast
+        # przez mouse-release z kliknięcia przycisku który go otworzył
         self.setWindowFlags(
-            Qt.WindowType.Popup |
+            Qt.WindowType.Tool |
             Qt.WindowType.FramelessWindowHint
         )
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
         dark = _is_dark()
         self._bg  = "#1e1e1e" if dark else "#f9f9f9"
@@ -231,6 +233,8 @@ class UpdateDropdown(QFrame):
         self.adjustSize()
         self._position(anchor_widget)
         self.show()
+        self.raise_()
+        QApplication.instance().installEventFilter(self)
 
     def _build(self):
         self.setStyleSheet(f"""
@@ -372,11 +376,31 @@ class UpdateDropdown(QFrame):
         root.addWidget(btn_block)
 
     def _position(self, anchor: QWidget) -> None:
-        """Pozycjonuje panel poniżej anchor widgetu."""
         gpos = anchor.mapToGlobal(QPoint(0, anchor.height() + 4))
         screen = QApplication.primaryScreen().availableGeometry()
         x = min(gpos.x(), screen.right() - self.WIDTH - 8)
-        self.move(x, gpos.y())
+        y = gpos.y()
+        if y + self.height() > screen.bottom():
+            y = anchor.mapToGlobal(QPoint(0, -self.height() - 4)).y()
+        self.move(x, y)
+
+    def eventFilter(self, obj, event):
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.MouseButtonPress:
+            try:
+                gpos = event.globalPosition().toPoint()
+            except AttributeError:
+                gpos = event.globalPos()
+            if not self.geometry().contains(gpos):
+                self.close()
+        return False
+
+    def closeEvent(self, event):
+        try:
+            QApplication.instance().removeEventFilter(self)
+        except Exception:
+            pass
+        super().closeEvent(event)
 
     def _download(self) -> None:
         url = self._info.get("download_url", "")
