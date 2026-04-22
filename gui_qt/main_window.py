@@ -2432,34 +2432,13 @@ class MainWindow(QMainWindow):
             self._toast.show(f"Auto-type za {int(delay_s)}s — przełącz okno", "info",
                              duration_ms=int(delay_s * 1000) + 800)
 
-        def _type_worker():
-            import time as _t
+        import time as _t
+        def _delayed_type():
             _t.sleep(delay_s)
-            try:
-                from pynput.keyboard import Key, Controller
-                kb = Controller()
-                i = 0
-                while i < len(sequence):
-                    if sequence[i] == '{':
-                        end = sequence.find('}', i)
-                        if end == -1:
-                            i += 1
-                            continue
-                        token = sequence[i+1:end].upper()
-                        if token == 'USERNAME':    kb.type(username)
-                        elif token == 'PASSWORD':  kb.type(password)
-                        elif token == 'TAB':       _t.sleep(0.06); kb.press(Key.tab); kb.release(Key.tab)
-                        elif token == 'ENTER':     _t.sleep(0.06); kb.press(Key.enter); kb.release(Key.enter)
-                        elif token.startswith('DELAY='):
-                            try: _t.sleep(int(token[6:]) / 1000)
-                            except ValueError: pass
-                        i = end + 1
-                    else:
-                        kb.type(sequence[i]); i += 1
-            except Exception:
-                pass
+            from utils.autotype import auto_type
+            auto_type(username, password, sequence)
 
-        threading.Thread(target=_type_worker, daemon=True).start()
+        threading.Thread(target=_delayed_type, daemon=True).start()
 
     # ── Category management ───────────────────────────────────────────
 

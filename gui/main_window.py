@@ -3132,52 +3132,19 @@ class MainWindow(ctk.CTk):
 
         def _type_worker():
             import time, ctypes
-            from pynput.keyboard import Key, Controller
+            from utils.autotype import type_sequence_now
 
-            # Czekaj na odliczenie
             time.sleep(delay_s)
 
-            # Minimalizuj z wątku (bezpieczne, nie dotykamy tkinter)
             if self._own_hwnd_cache:
                 ctypes.windll.user32.ShowWindow(self._own_hwnd_cache, 6)  # SW_MINIMIZE
-
             time.sleep(0.5)
 
-            # Przywróć focus na docelowe okno
             if target_hwnd:
                 ctypes.windll.user32.SetForegroundWindow(target_hwnd)
                 time.sleep(0.2)
 
-            # Wpisz sekwencję
-            kb = Controller()
-            i = 0
-            seq = sequence or "{USERNAME}{TAB}{PASSWORD}{ENTER}"
-            while i < len(seq):
-                if seq[i] == '{':
-                    end = seq.find('}', i)
-                    if end == -1:
-                        i += 1
-                        continue
-                    token = seq[i+1:end].upper()
-                    if token == 'USERNAME':
-                        kb.type(username)
-                    elif token == 'PASSWORD':
-                        kb.type(password)
-                    elif token == 'TAB':
-                        time.sleep(0.06)
-                        kb.press(Key.tab); kb.release(Key.tab)
-                    elif token == 'ENTER':
-                        time.sleep(0.06)
-                        kb.press(Key.enter); kb.release(Key.enter)
-                    elif token.startswith('DELAY='):
-                        try:
-                            time.sleep(int(token[6:]) / 1000)
-                        except ValueError:
-                            pass
-                    i = end + 1
-                else:
-                    kb.type(seq[i])
-                    i += 1
+            type_sequence_now(username, password, sequence)
 
         threading.Thread(target=_type_worker, daemon=True).start()
 
