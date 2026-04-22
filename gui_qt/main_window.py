@@ -2364,16 +2364,19 @@ class MainWindow(QMainWindow):
                 entry = w.entry   # priorytet: zaznaczony
                 break
         if entry is None:
-            self._toast.show("Brak widocznych haseł do zduplikowania", "warning")
+            if self._toast:
+                self._toast.show("Brak widocznych haseł do zduplikowania", "warning")
             return
         try:
             new_entry = self.db.duplicate_password(entry, self.crypto)
             self.db.log_event(self.user, "password_created",
                               entry_id=new_entry.id, details=f"duplikat: {entry.title}")
             self._refresh()
-            self._toast.show(f"Zduplikowano: {entry.title}", "success")
+            if self._toast:
+                self._toast.show(f"Zduplikowano: {entry.title}", "success")
         except Exception as e:
-            self._toast.show(f"Błąd duplikowania: {e}", "error")
+            if self._toast:
+                self._toast.show(f"Błąd duplikowania: {e}", "error")
 
     def _show_shortcuts(self):
         dark = (self._prefs.get("appearance_mode") or "dark").lower() != "light"

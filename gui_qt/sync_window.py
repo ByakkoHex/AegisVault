@@ -403,7 +403,12 @@ class SyncWindow(QDialog):
 
     def _check_status(self) -> None:
         def _run():
-            connected = self.sync.is_connected()
+            try:
+                connected = self.sync.is_connected()
+            except Exception:
+                import logging
+                logging.getLogger("aegisvault").exception("Błąd sprawdzania statusu synchronizacji")
+                connected = False
             self._status_sig.emit(connected)
         threading.Thread(target=_run, daemon=True).start()
 

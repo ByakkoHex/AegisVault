@@ -1481,13 +1481,18 @@ class SettingsPanel(QWidget):
         self._wh_disable_btn.setText("Weryfikacja…")
 
         def _do() -> None:
-            verified = wh.verify("Wyłącz Windows Hello — AegisVault")
-            if not verified:
+            try:
+                verified = wh.verify("Wyłącz Windows Hello — AegisVault")
+                if not verified:
+                    self._wh_disable_result.emit("verify_fail")
+                    return
+                wh.delete_credential(self.user.username)
+                wh.invalidate_cache()
+                self._wh_disable_result.emit("ok")
+            except Exception:
+                import logging
+                logging.getLogger("aegisvault").exception("Błąd wyłączania Windows Hello")
                 self._wh_disable_result.emit("verify_fail")
-                return
-            wh.delete_credential(self.user.username)
-            wh.invalidate_cache()
-            self._wh_disable_result.emit("ok")
 
         threading.Thread(target=_do, daemon=True).start()
 

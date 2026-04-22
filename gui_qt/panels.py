@@ -529,7 +529,11 @@ class PasswordFormPanel(SlidePanelBase):
 
         from utils.import_manager import _parse_otp_secret
         otp_raw    = self._otp_e.text().strip()
-        otp_secret = _parse_otp_secret(otp_raw) if otp_raw else None
+        # Przy edycji: pusty string → "" (sygnał "wyczyść OTP"), nie None ("nie zmieniaj")
+        if self._entry:
+            otp_secret = _parse_otp_secret(otp_raw) if otp_raw else ""
+        else:
+            otp_secret = _parse_otp_secret(otp_raw) if otp_raw else None
 
         if self._entry:
             self._db.update_password(

@@ -5,11 +5,21 @@ Zmień APP_VERSION przy każdym wydaniu, aby klienci mogli wykryć aktualizację
 Format: MAJOR.MINOR.PATCH
 """
 
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.4.3"
 
 # Historia wersji — lista (wersja, tytuł, [zmiany])
 # Najnowsza wersja na górze.
 VERSION_HISTORY = [
+    (
+        "1.4.3",
+        "Bugfixes — wątki, OTP, duplikowanie, stabilność",
+        [
+            "Naprawiono: wyłączanie Windows Hello crashowało wątek jeśli wh.verify() rzuciło wyjątek — przycisk blokował się na stałe",
+            "Naprawiono: sprawdzanie statusu synchronizacji crashowało wątek jeśli is_connected() rzuciło wyjątek — status nigdy się nie aktualizował",
+            "Naprawiono: czyszczenie sekretu OTP przy edycji hasła nie działało — puste pole zostawiało stary sekret",
+            "Naprawiono: duplikowanie hasła (_duplicate_first) rzucało AttributeError gdy self._toast nie był ustawiony",
+        ],
+    ),
     (
         "1.4.2",
         "Bugfixes — edycja haseł i Auto-Type",
