@@ -99,6 +99,12 @@ hidden = [
     "certifi",
     # Schowek / system
     "pyperclip",
+    # Auto-type (lazy import wewnątrz wątku)
+    "pynput",
+    "pynput.keyboard",
+    "pynput.keyboard._win32",
+    "pynput.mouse",
+    "pynput.mouse._win32",
     # Keyring
     "keyring",
     # Stdlib

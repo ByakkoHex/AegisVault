@@ -5,11 +5,23 @@ Zmień APP_VERSION przy każdym wydaniu, aby klienci mogli wykryć aktualizację
 Format: MAJOR.MINOR.PATCH
 """
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 
 # Historia wersji — lista (wersja, tytuł, [zmiany])
 # Najnowsza wersja na górze.
 VERSION_HISTORY = [
+    (
+        "1.4.2",
+        "Bugfixes — edycja haseł i Auto-Type",
+        [
+            "Naprawiono: aplikacja crashowała przy próbie edycji hasła (AttributeError: _c przed inicjalizacją kolorów)",
+            "Naprawiono: aplikacja crashowała przy Auto-Type (TypeError: nieprawidłowa nazwa parametru duration w toast)",
+            "Naprawiono: toast auto-backup — ten sam błąd duration vs duration_ms",
+            "Dodano: sys.excepthook loguje wszystkie nieobsłużone wyjątki do pliku logu",
+            "Dodano: pynput i submoduły w hiddenimports PyInstaller — pewne bundlowanie Auto-Type",
+            "Dodano: try/except w _edit() i _edit_note() — błąd pokazuje dialog zamiast cicho crashować",
+        ],
+    ),
     (
         "1.4.1",
         "Poprawka sprawdzania aktualizacji",

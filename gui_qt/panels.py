@@ -173,6 +173,7 @@ class PasswordFormPanel(SlidePanelBase):
 
     def _build_ui(self):
         c = _colors(self._prefs)
+        self._c = c  # musi być przed textChanged.connect → _update_strength używa _c
 
         self.setStyleSheet(f"""
             QLabel  {{ color: {c['text']}; font-size: 13px; background: transparent; border: none; }}
@@ -406,8 +407,6 @@ class PasswordFormPanel(SlidePanelBase):
             for name, value in self._db.get_custom_fields(e, self._crypto):
                 self._add_custom_field_row(name, value)
 
-        # Store colors for later
-        self._c = c
         self._hibp_result.connect(self._on_hibp_result)
 
     # ── Helpers ───────────────────────────────────────────────────────

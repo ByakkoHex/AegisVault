@@ -540,10 +540,16 @@ class PasswordRowWidget(QFrame):
         return bool(self._checkbox and self._checkbox.isChecked())
 
     def _edit_note(self):
-        win = self.window()
-        parent = win.centralWidget() if hasattr(win, "centralWidget") else win
-        user = win.user if hasattr(win, "user") else self.user
-        NoteFormPanel(parent, self.db, user, self.entry, on_saved=self.on_refresh).open()
+        try:
+            win = self.window()
+            parent = win.centralWidget() if hasattr(win, "centralWidget") else win
+            user = win.user if hasattr(win, "user") else self.user
+            NoteFormPanel(parent, self.db, user, self.entry, on_saved=self.on_refresh).open()
+        except Exception as e:
+            import logging
+            logging.getLogger("aegisvault").exception("Błąd otwarcia edycji notatki: %s", e)
+            from gui_qt.dialogs import show_error
+            show_error("Błąd edycji", f"Nie można otworzyć panelu edycji:\n{e}", parent=self.window())
 
     def _copy(self):
         try:
@@ -580,9 +586,15 @@ class PasswordRowWidget(QFrame):
             pass
 
     def _edit(self):
-        win = self.window()
-        parent = win.centralWidget() if hasattr(win, "centralWidget") else win
-        PasswordFormPanel(parent, self.db, self.crypto, self.user, self.entry, on_saved=self.on_refresh).open()
+        try:
+            win = self.window()
+            parent = win.centralWidget() if hasattr(win, "centralWidget") else win
+            PasswordFormPanel(parent, self.db, self.crypto, self.user, self.entry, on_saved=self.on_refresh).open()
+        except Exception as e:
+            import logging
+            logging.getLogger("aegisvault").exception("Błąd otwarcia edycji hasła: %s", e)
+            from gui_qt.dialogs import show_error
+            show_error("Błąd edycji", f"Nie można otworzyć panelu edycji:\n{e}", parent=self.window())
 
     def _trash(self):
         if ask_yes_no("Kosz", f"Przenieść '{self.entry.title}' do kosza?",
@@ -667,7 +679,7 @@ class MainWindow(QMainWindow):
         self._score_ready_sig.connect(self._on_score_ready)
         self._backup_done_sig.connect(
             lambda fname: self._toast and self._toast.show(
-                f"Auto-backup zapisany: {fname}", "info", duration=4000
+                f"Auto-backup zapisany: {fname}", "info", duration_ms=4000
             )
         )
 
@@ -2415,7 +2427,7 @@ class MainWindow(QMainWindow):
         sequence = self._prefs.get("autotype_sequence") or "{USERNAME}{TAB}{PASSWORD}{ENTER}"
         if self._toast:
             self._toast.show(f"Auto-type za {int(delay_s)}s — przełącz okno", "info",
-                             duration=int(delay_s * 1000) + 800)
+                             duration_ms=int(delay_s * 1000) + 800)
 
         def _type_worker():
             import time as _t

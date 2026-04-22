@@ -7,10 +7,24 @@ Flagi:        --no-splash   pomiń ekran startowy
 """
 
 import sys
+import logging
 
 from utils.logger import setup_logging
 from utils.paths import get_db_path
 from utils.prefs_manager import PrefsManager
+
+
+def _setup_excepthook():
+    """Loguje niezłapane wyjątki do pliku zamiast cicho crashować."""
+    _log = logging.getLogger("aegisvault.crash")
+
+    def _hook(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        _log.critical("Niezłapany wyjątek", exc_info=(exc_type, exc_value, exc_tb))
+
+    sys.excepthook = _hook
 
 
 def _acquire_mutex():
@@ -33,6 +47,7 @@ def _acquire_mutex():
 def main():
     prefs = PrefsManager()
     setup_logging(prefs.get("log_retention_days"))
+    _setup_excepthook()
 
     from gui_qt.app import create_app
     app = create_app()
